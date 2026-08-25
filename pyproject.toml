@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "drusilla"
+version = "0.1.0"
+authors = [
+  { name = "Lars Gabriel", email = "lars.gabriel@uni-greifswald.de" },
+]
+description = "Deep-learning ORF annotator for RNA-seq assembled transcripts."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+keywords = ["bioinformatics", "gene-prediction", "orf", "annotation", "rna-seq"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+  "pyyaml",
+  "numpy",
+  "pyfaidx",
+]
+
+[project.optional-dependencies]
+gpu = [
+  "tensorflow[and-cuda]>=2.17,<2.20",
+  "bricks2marble[tf]",
+  "hidten",
+  "biopython",
+  "pandas",
+]
+test = ["pytest"]
+
+[project.scripts]
+drusilla = "drusilla.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Gaius-Augustus/Drusilla"
+Issues = "https://github.com/Gaius-Augustus/Drusilla/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drusilla"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"models.yaml" = "drusilla/_bundled/models.yaml"
+"configs/default.yaml" = "drusilla/_bundled/configs/default.yaml"
+"configs/vertebrates.yaml" = "drusilla/_bundled/configs/vertebrates.yaml"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

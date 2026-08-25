@@ -1,0 +1,45 @@
+# Drusilla default architecture / training config.
+#
+# Used by the vertebrate model release. To fine-tune from these weights
+# on your own TFRecords, keep the `model:` block identical and tune the
+# `training:` block.
+
+data:
+  chunk_len: 9999
+  batch_size: 32
+  shuffle_buffer: 2048
+
+model:
+  # Pick one of: cnn_lstm, cnn_transformer
+  type: cnn_lstm
+
+  # Shared CNN stem (used by all architectures).
+  conv_filters: 64
+  conv_kernel: 9
+  conv_layers: 2
+
+  cnn_lstm:
+    pool_size: 9
+    lstm_units: 200
+    lstm_layers: 2
+    dropout: 0.3
+    head_hidden: 32
+
+  cnn_transformer:
+    pool_size: 9
+    d_model: 256
+    num_heads: 4
+    ff_dim: 512
+    transformer_layers: 4
+    dropout: 0.1
+    head_hidden: 32
+
+training:
+  learning_rate: 1.0e-3
+  weight_decay: 0.0
+  epochs: 50
+  steps_per_epoch: 2000
+  class_weights: [1, 10, 1, 1, 1, 10]
+
+checkpointing:
+  save_every_epoch: true

@@ -1,0 +1,26 @@
+# Drusilla model registry.
+#
+# Weights are downloaded on demand into $XDG_CACHE_HOME/drusilla/models/
+# (or $DRUSILLA_CACHE_DIR if set) and verified against sha256 before use.
+#
+# To publish a new model:
+#   1. Upload the .weights.h5 to a stable HTTPS URL.
+#   2. Add a new entry below.
+#   3. Fill in weights_sha256 with `sha256sum <file>`.
+#   4. Ship the training config alongside the weights (or point config to a
+#      bundled path under drusilla._bundled.configs, e.g. "default.yaml").
+#
+# To override this registry at runtime (e.g. for staging a new release
+# without a package update), set DRUSILLA_MODELS_URL to a URL that returns
+# YAML with the same schema.
+
+schema_version: 1
+
+models:
+  vertebrates:
+    version: "1.0"
+    weights_url:    "https://TODO.uni-greifswald.de/drusilla/vertebrates-v1.0.weights.h5"
+    weights_sha256: "TODO"
+    config:         "default.yaml"
+    clades:         ["vertebrata"]
+    description:    "Vertebrate ORF finder (CNN + BiLSTM, 6-state HMM head)."

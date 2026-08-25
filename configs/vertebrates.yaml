@@ -1,0 +1,50 @@
+# Training config used for the released vertebrate model.
+#
+# CNN-BiLSTM trained on 51 vertebrate species with 4 held-out validation
+# species, boundary-F1 auxiliary loss, plateau-based LR reduction.
+
+data:
+  chunk_len: 9999
+  batch_size: 400
+  shuffle_buffer: 2048
+
+model:
+  type: cnn_lstm
+
+  conv_filters: 64
+  conv_kernel: 9
+  conv_layers: 2
+
+  cnn_lstm:
+    pool_size: 9
+    lstm_units: 200
+    lstm_layers: 2
+    dropout: 0.0
+    head_hidden: 32
+
+  cnn_transformer:
+    pool_size: 9
+    d_model: 256
+    num_heads: 4
+    ff_dim: 512
+    transformer_layers: 4
+    dropout: 0.1
+    head_hidden: 32
+
+training:
+  loss_type: cce_boundary_f1
+  f1_lambda: 1.0
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  epochs: 300
+  steps_per_epoch: 2000
+  class_weights: [1, 5, 1, 1, 1, 5]
+
+  lr_reduce:
+    monitor: val_loss
+    patience: 7
+    factor: 0.5
+    min_lr: 1.0e-6
+
+checkpointing:
+  save_every_epoch: true
