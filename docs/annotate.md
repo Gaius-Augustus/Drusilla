@@ -33,14 +33,23 @@ used. Only override it if you know what you're doing.
 
 ## Output
 
-Written under `--out-dir`:
+Written under `--out-dir` in the default mode:
 
 | File | Description |
 |---|---|
-| `orfs.gtf`     | Genomic GTF, one `CDS` line per genomic sub-interval of every predicted ORF (1-based inclusive; `source = "drusilla"`; shared `transcript_id` / `gene_id` per ORF). |
-| `orfs.log`     | b2m annotation log. |
-| `stringtie.gtf`, `transcripts.fa` | Intermediate files. Deleted unless `--keep-tmp` is set. Only when `--bam` was passed / when gffread was run. |
-| `stringtie.filtered.gtf` | Present when any of the reference-free filters below are used. |
+| `orfs.gtf`       | **PRIMARY.** Genomic-coordinate GTF, one `CDS` line per genomic sub-interval of every predicted ORF (1-based inclusive; `source = "drusilla"`; shared `transcript_id` / `gene_id` per ORF). Subsequence-isoform collapse is applied by default (see below). |
+| `orfs_local.gtf` | Same predictions in transcript (local) coordinates: one `CDS` line per predicted ORF, contig column holds the StringTie `transcript_id`, strand = `+`, phase = 0 at the ORF start. Always in sync with `orfs.gtf` (same set of kept transcripts). |
+| `orfs.log`       | b2m annotation log. |
+
+Extra outputs, only produced when their flag is set:
+
+| File | Enabled by |
+|---|---|
+| `orfs.dropped_subseq.tsv` | `--subseq-report` |
+| `<partial-out.gtf>`       | `--partial-out FILE`  (3'-truncated ORFs) |
+| `<partial5-out.gtf>`      | `--partial5-out FILE` (5'-truncated ORFs) |
+| `stringtie.filtered.gtf`  | Any of `--min-cov / --min-tpm / --drop-unstranded / --drop-single-exon`. |
+| `stringtie.gtf`, `transcripts.fa` | Intermediates produced when starting from `--bam` or when gffread ran. Deleted unless `--keep-tmp` is set. |
 
 ## Flags
 
@@ -98,19 +107,22 @@ Typical short-read defaults: `--min-cov 3 --min-tpm 1 --drop-unstranded`.
 | `--partial5-out FILE`    | Also write 5'-truncated ORFs (`E*` at position 0, ending at a STOP; no upstream ATG). |
 | `--lorf-class`           | Add a `lorf_class` GTF attribute per ORF (`LORF_UPSTOP` / `sORF_UPSTOP` / `upLORF` / `LORF_NOUPSTOP`). Requires loading transcript sequences into memory. |
 
-### Subsequence-isoform collapse (optional post-step)
+### Subsequence-isoform collapse (default ON)
 
-After annotation, drop predicted isoforms whose spliced CDS is a
-(near-)sub-sequence of another isoform in the same StringTie locus (locus
-= `transcript_id` minus the trailing `.<iso>`). The same collapse is
-available as a standalone command — see [filter_subseq.md](filter_subseq.md).
+Drops predicted isoforms whose spliced CDS is a (near-)sub-sequence of
+another isoform in the same StringTie locus (locus = `transcript_id`
+minus the trailing `.<iso>`). Applied automatically to both `orfs.gtf`
+and `orfs_local.gtf` so the two files always agree. The same collapse
+is also available as a standalone command — see
+[filter_subseq.md](filter_subseq.md).
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--subseq-collapse`               | off | Enable the post-step. Writes `orfs.filtered.gtf` and `orfs.dropped_subseq.tsv` alongside `orfs.gtf`. |
+| `--no-subseq-collapse`            | off (collapse on) | Disable the collapse. `orfs.gtf` / `orfs_local.gtf` contain all predicted isoforms. |
 | `--subseq-terminal-overhang-nt N` | 0   | Nt of overhang allowed at leftmost/rightmost CDS block past the matched keeper block. |
 | `--subseq-splice-shift-nt N`      | 0   | Nt of tolerance at each side of an interior CDS block boundary. Must be a multiple of 3 (frame-preserving). |
 | `--subseq-allow-exon-skip`        | off | Allow the dropped isoform's exons to be a non-contiguous ordered subset of the keeper's exons. |
+| `--subseq-report`                 | off | Also write `orfs.dropped_subseq.tsv` (`dropped_tid`, `keeper_tid`, `reason`). |
 
 ## Examples
 

@@ -71,19 +71,27 @@ Output (in `--out-dir`):
 - Intermediate StringTie / gffread output (deleted unless
   `--keep-tmp` is set).
 
+Output (in `--out-dir`) by default:
+
+- `orfs.gtf` — **primary**, genomic-coordinate CDS lines, subsequence
+  collapse applied.
+- `orfs_local.gtf` — same predictions in transcript coordinates.
+- `orfs.log` — b2m annotation log.
+
 See [docs/annotate.md](docs/annotate.md) for the full flag reference.
 
-### Optional subsequence-isoform collapse
+### Subsequence-isoform collapse (on by default)
 
-Multi-isoform StringTie assemblies often produce many isoforms whose
-predicted CDS is a sub-sequence of another isoform's. Collapse them
-with either an inline post-step:
+Multi-isoform StringTie assemblies often produce isoforms whose
+predicted CDS is a sub-sequence of another isoform's. Drusilla collapses
+these automatically in every `drusilla annotate` run. Disable with:
 
 ```bash
-drusilla annotate ... --subseq-collapse   # writes orfs.filtered.gtf
+drusilla annotate ... --no-subseq-collapse
 ```
 
-or the standalone command, on any prediction GTF:
+The same collapse is exposed as a standalone command for post-processing
+prediction GTFs from other sources:
 
 ```bash
 drusilla filter-subseq \

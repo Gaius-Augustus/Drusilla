@@ -8,10 +8,18 @@ Model weights are resolved via the registry: pass ``--model <name>`` to
 download and use a released model, or ``--weights <path>`` to load a
 locally-trained checkpoint.
 
-Output (in --out-dir):
-    orfs.gtf     genomic GTF of predicted CDS lines (source = "drusilla")
-    orfs.log     b2m annotation log
-    stringtie.gtf, transcripts.fa   intermediate files (kept iff --keep-tmp)
+Default output (in --out-dir):
+    orfs.gtf        PRIMARY. Genomic-coordinate GTF of predicted CDS lines
+                    (source = "drusilla"), 1-based inclusive, with the
+                    subsequence-isoform collapse applied.
+    orfs_local.gtf  Same predictions in transcript (local) coordinates:
+                    one CDS line per predicted ORF, contig column holds
+                    the StringTie transcript_id.
+    orfs.log        b2m annotation log.
+
+Subsequence collapse is ON by default. Disable with --no-subseq-collapse
+(both orfs.gtf and orfs_local.gtf are then the raw predictions).
+Opt into a drop-report TSV with --subseq-report.
 """
 
 from __future__ import annotations
@@ -109,21 +117,24 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                     help="Annotate each ORF with its LORF class (LORF_UPSTOP / "
                          "sORF_UPSTOP / upLORF / LORF_NOUPSTOP) as a GTF attr.")
 
-    # Post-step: collapse subsequence isoforms.
-    ap.add_argument("--subseq-collapse", action="store_true",
-                    help="After annotation, drop predicted isoforms whose CDS "
-                         "is a (near-)sub-sequence of another isoform in the "
-                         "same StringTie locus. Writes orfs.filtered.gtf and "
-                         "orfs.dropped_subseq.tsv alongside orfs.gtf.")
+    # Subsequence-isoform collapse (ON by default).
+    ap.add_argument("--no-subseq-collapse",
+                    dest="subseq_collapse", action="store_false", default=True,
+                    help="Disable the default subsequence-isoform collapse. "
+                         "orfs.gtf / orfs_local.gtf are then the raw model "
+                         "predictions (all isoforms kept).")
     ap.add_argument("--subseq-terminal-overhang-nt", type=int, default=0,
-                    help="With --subseq-collapse: overhang tolerance at "
+                    help="Subseq collapse: overhang tolerance at "
                          "leftmost/rightmost CDS block (default 0 = strict).")
     ap.add_argument("--subseq-splice-shift-nt", type=int, default=0,
-                    help="With --subseq-collapse: interior boundary tolerance "
+                    help="Subseq collapse: interior boundary tolerance "
                          "(must be a multiple of 3; default 0 = strict).")
     ap.add_argument("--subseq-allow-exon-skip", action="store_true",
-                    help="With --subseq-collapse: allow A's exons to be a "
+                    help="Subseq collapse: allow A's exons to be a "
                          "non-contiguous ordered subset of B's exons.")
+    ap.add_argument("--subseq-report", action="store_true",
+                    help="Also write orfs.dropped_subseq.tsv "
+                         "(dropped_tid, keeper_tid, reason).")
 
 
 def _enable_gpu_memory_growth() -> None:
@@ -591,7 +602,13 @@ def run(args: argparse.Namespace) -> int:
         _parse_tx_to_gene(stringtie_gtf) if args.single_isoform else {}
     )
 
-    per_tx_output: dict[str, tuple[int, list[str]]] = {}
+    # Per input transcript, the outputs of postprocess:
+    #   global_lines    genomic-coord CDS lines (one per exon-spanning segment)
+    #   local_intervals transcript-coord ORF intervals (pad-stripped, half-open,
+    #                   one entry per predicted ORF; typically length 1)
+    #   coding_length   total predicted CDS length in nt
+    #   lorf_class      LORF class if --lorf-class was set, else None
+    per_tx_output: dict[str, dict] = {}
     lorf_counts: dict[str, int] = {}
 
     pad_k = max(args.prefix_pad_n, args.flank_bp)
@@ -662,7 +679,12 @@ def run(args: argparse.Namespace) -> int:
                     tid, cds_intervals, transcripts[tid], "drusilla",
                     lorf_class=lc,
                 )
-                per_tx_output[tid] = (coding_length, lines)
+                per_tx_output[tid] = {
+                    "coding_length": coding_length,
+                    "global_lines": lines,
+                    "local_intervals": list(cds_intervals),
+                    "lorf_class": lc,
+                }
         return annot
 
     if intermediate_gtf.exists():
@@ -688,7 +710,8 @@ def run(args: argparse.Namespace) -> int:
 
     if args.single_isoform:
         best_per_gene: dict[str, tuple[int, str]] = {}
-        for tid, (length, _lines) in per_tx_output.items():
+        for tid, entry in per_tx_output.items():
+            length = entry["coding_length"]
             gid = tx_to_gene.get(tid, tid)
             cur = best_per_gene.get(gid)
             if cur is None or length > cur[0] or (length == cur[0] and tid < cur[1]):
@@ -702,17 +725,124 @@ def run(args: argparse.Namespace) -> int:
     else:
         keep_tids = set(per_tx_output)
 
+    # --- Subsequence-isoform collapse (default ON). --------------------
+    # Runs on the genomic-coord predictions in keep_tids. Drops any
+    # isoform whose spliced CDS is a (near-)sub-sequence of another
+    # isoform in the same StringTie locus. Both orfs.gtf (global) and
+    # orfs_local.gtf (transcript coords) are written from the same final
+    # keep_tids set so the two files always agree.
+    drop_map: dict[str, str] = {}
+    if args.subseq_collapse and len(keep_tids) > 1:
+        from ..postprocess.subseq_filter import find_dropable
+
+        print(
+            "[subseq-collapse] enabled by default. Drops predicted isoforms "
+            "whose spliced CDS is a (near-)sub-sequence of another isoform "
+            "in the same StringTie locus. Disable with --no-subseq-collapse.",
+            flush=True,
+        )
+        print(
+            f"[subseq-collapse] tolerances : "
+            f"overhang={args.subseq_terminal_overhang_nt}nt "
+            f"splice_shift={args.subseq_splice_shift_nt}nt "
+            f"allow_exon_skip={args.subseq_allow_exon_skip}",
+            flush=True,
+        )
+
+        # Build the by_tid dict for the collapse from the in-memory global
+        # lines (avoids a round-trip through disk).
+        by_tid: dict[str, dict] = {}
+        for tid in keep_tids:
+            if tid not in transcripts:
+                continue
+            tx = transcripts[tid]
+            exons: list[tuple[int, int]] = []
+            for line in per_tx_output[tid]["global_lines"]:
+                f = line.split("\t")
+                exons.append((int(f[3]) - 1, int(f[4])))
+            exons.sort()
+            by_tid[tid] = {
+                "contig": tx.contig,
+                "strand": tx.strand,
+                "exons": exons,
+                "lines": per_tx_output[tid]["global_lines"],
+            }
+
+        drop_map = find_dropable(
+            by_tid,
+            terminal_overhang_nt=args.subseq_terminal_overhang_nt,
+            splice_shift_nt=args.subseq_splice_shift_nt,
+            allow_exon_skip=args.subseq_allow_exon_skip,
+        )
+        n_in = len(by_tid)
+        n_dropped = len(drop_map)
+        n_kept = n_in - n_dropped
+        pct = 100.0 * n_dropped / max(1, n_in)
+        print(
+            f"[subseq-collapse] input tx   : {n_in}\n"
+            f"[subseq-collapse] dropped tx : {n_dropped} ({pct:.1f}%)\n"
+            f"[subseq-collapse] kept tx    : {n_kept}",
+            flush=True,
+        )
+
+        keep_tids -= set(drop_map)
+
+    elif not args.subseq_collapse:
+        print(
+            "[subseq-collapse] disabled (--no-subseq-collapse). "
+            "orfs.gtf / orfs_local.gtf contain all predicted isoforms.",
+            flush=True,
+        )
+
+    # --- Write orfs.gtf (PRIMARY, global genomic coordinates). ---------
     n_lines = 0
     with open(out_gtf, "w") as fh:
         for tid in sorted(keep_tids):
-            for line in per_tx_output[tid][1]:
+            for line in per_tx_output[tid]["global_lines"]:
                 fh.write(line + "\n")
                 n_lines += 1
-
     print(
-        f"Wrote {n_lines} CDS lines from {len(keep_tids)} transcripts -> {out_gtf}",
+        f"[global]  wrote {n_lines} CDS lines from {len(keep_tids)} transcripts "
+        f"-> {out_gtf}  (PRIMARY OUTPUT)",
         flush=True,
     )
+
+    # --- Write orfs_local.gtf (transcript / local coordinates). --------
+    # One CDS line per predicted ORF; contig column = StringTie
+    # transcript_id, strand = "+" (transcripts are always in reading
+    # direction after gffread -w), phase = 0 at the ORF start.
+    local_gtf = args.out_dir / "orfs_local.gtf"
+    n_local = 0
+    with open(local_gtf, "w") as fh:
+        for tid in sorted(keep_tids):
+            entry = per_tx_output[tid]
+            lc = entry.get("lorf_class")
+            lorf_attr = f' lorf_class "{lc}";' if lc is not None else ""
+            attrs = f'transcript_id "{tid}"; gene_id "{tid}";{lorf_attr}'
+            for s, e in entry["local_intervals"]:
+                if s >= e:
+                    continue
+                fh.write(
+                    "\t".join([
+                        tid, "drusilla", "CDS",
+                        str(s + 1), str(e), ".", "+", "0",
+                        attrs,
+                    ]) + "\n"
+                )
+                n_local += 1
+    print(
+        f"[local]   wrote {n_local} CDS lines -> {local_gtf}",
+        flush=True,
+    )
+
+    # Optional drop-report TSV.
+    if args.subseq_report and args.subseq_collapse:
+        report_tsv = args.out_dir / "orfs.dropped_subseq.tsv"
+        with report_tsv.open("w", encoding="utf-8") as fh:
+            fh.write("dropped_tid\tkeeper_tid\treason\n")
+            for dropped, keeper in sorted(drop_map.items()):
+                fh.write(f"{dropped}\t{keeper}\tsub_sequence_of_keeper\n")
+        print(f"[subseq-collapse] drop report -> {report_tsv}", flush=True)
     if pad_k > 0:
         print(
             f"5'-prefix postprocess: unchanged={n_unchanged} "
@@ -787,26 +917,6 @@ def run(args: argparse.Namespace) -> int:
                         fh.write(line + "\n")
                     n_partial5 += 1
         print(f"5'-partial ORFs: {n_partial5} -> {args.partial5_out}", flush=True)
-
-    if args.subseq_collapse:
-        from ..postprocess.subseq_filter import run_filter
-
-        filt_gtf = args.out_dir / "orfs.filtered.gtf"
-        report_tsv = args.out_dir / "orfs.dropped_subseq.tsv"
-        stats = run_filter(
-            orfs_gtf=out_gtf,
-            out_gtf=filt_gtf,
-            report_tsv=report_tsv,
-            terminal_overhang_nt=args.subseq_terminal_overhang_nt,
-            splice_shift_nt=args.subseq_splice_shift_nt,
-            allow_exon_skip=args.subseq_allow_exon_skip,
-        )
-        print(
-            f"subseq-collapse: input tx={stats['n_input_tx']} "
-            f"dropped={stats['n_dropped_tx']} ({stats['pct_dropped']:.1f}%) "
-            f"kept={stats['n_kept_tx']} -> {filt_gtf}",
-            flush=True,
-        )
 
     if not args.keep_tmp:
         for f in (intermediate_gtf, args.out_dir / "transcripts.fa",
