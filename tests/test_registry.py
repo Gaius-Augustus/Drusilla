@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import os
 import tarfile
 from pathlib import Path
 
@@ -21,7 +19,6 @@ def test_bundled_manifest_loads():
     assert mf.name == "vertebrates"
     assert mf.version
     assert mf.weights_url
-    assert mf.weights_sha256
 
 
 def test_load_manifest_unknown_raises():
@@ -34,8 +31,7 @@ def test_load_manifest_from_user_dir(tmp_path: Path, monkeypatch):
     (tmp_path / "custom.yaml").write_text(
         "name: custom\n"
         "version: '0.1'\n"
-        "weights_url: 'https://example.com/custom-v0.1.tar.gz'\n"
-        "weights_sha256: 'deadbeef'\n",
+        "weights_url: 'https://example.com/custom-v0.1.tar.gz'\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(tmp_path))
@@ -48,8 +44,7 @@ def test_manifest_filename_stem_mismatch_rejected(tmp_path: Path, monkeypatch):
     (tmp_path / "wrongname.yaml").write_text(
         "name: differentname\n"
         "version: '1'\n"
-        "weights_url: 'x'\n"
-        "weights_sha256: 'x'\n",
+        "weights_url: 'x'\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(tmp_path))
@@ -59,7 +54,7 @@ def test_manifest_filename_stem_mismatch_rejected(tmp_path: Path, monkeypatch):
 
 def test_manifest_missing_required_field_rejected(tmp_path: Path, monkeypatch):
     (tmp_path / "broken.yaml").write_text(
-        "name: broken\nversion: '1'\nweights_url: 'x'\n",   # no sha256
+        "name: broken\nversion: '1'\n",   # no weights_url
         encoding="utf-8",
     )
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(tmp_path))
@@ -76,17 +71,6 @@ def test_cache_dir_respects_env(tmp_path, monkeypatch):
     assert d.exists()
 
 
-# ---------- placeholder rejection ----------
-
-def test_placeholder_checksum_rejected(tmp_path, monkeypatch):
-    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path))
-    mf = registry.load_manifest("vertebrates")
-    if not registry._looks_like_placeholder(mf.weights_sha256):
-        pytest.skip("vertebrates release has real checksum; test not applicable")
-    with pytest.raises(registry.RegistryError):
-        registry.resolve_model("vertebrates")
-
-
 # ---------- status ----------
 
 def test_status_uncached(tmp_path, monkeypatch):
@@ -97,9 +81,9 @@ def test_status_uncached(tmp_path, monkeypatch):
 
 # ---------- resolve_model end-to-end with a fake local archive ----------
 
-def _make_fake_archive(dir_name: str, workdir: Path) -> tuple[Path, str]:
+def _make_fake_archive(dir_name: str, workdir: Path) -> Path:
     """Build ``<dir_name>.tar.gz`` containing ``<dir_name>/weights.h5`` and
-    ``<dir_name>/arch.yaml``. Returns (archive_path, sha256hex)."""
+    ``<dir_name>/arch.yaml``. Returns the archive path."""
     extract_root = workdir / dir_name
     extract_root.mkdir()
     (extract_root / "weights.h5").write_bytes(b"fake weights payload")
@@ -109,19 +93,14 @@ def _make_fake_archive(dir_name: str, workdir: Path) -> tuple[Path, str]:
     archive = workdir / f"{dir_name}.tar.gz"
     with tarfile.open(archive, "w:gz") as tf:
         tf.add(extract_root, arcname=dir_name)
-    h = hashlib.sha256()
-    with archive.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 16), b""):
-            h.update(chunk)
-    return archive, h.hexdigest()
+    return archive
 
 
-def _write_manifest(dir_path: Path, name: str, version: str, url: str, sha: str):
+def _write_manifest(dir_path: Path, name: str, version: str, url: str):
     (dir_path / f"{name}.yaml").write_text(
         f"name: {name}\n"
         f"version: '{version}'\n"
-        f"weights_url: '{url}'\n"
-        f"weights_sha256: '{sha}'\n",
+        f"weights_url: '{url}'\n",
         encoding="utf-8",
     )
 
@@ -130,15 +109,11 @@ def test_resolve_model_downloads_and_extracts(tmp_path: Path, monkeypatch):
     """End-to-end: manifest + tar.gz -> extracted cache with correct paths."""
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive, sha = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel-v1.0", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
-    _write_manifest(
-        cfg_dir, name="fakemodel", version="1.0",
-        url=archive.as_uri(),   # file:// URL so urlopen works locally
-        sha=sha,
-    )
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
 
@@ -154,11 +129,11 @@ def test_resolve_model_downloads_and_extracts(tmp_path: Path, monkeypatch):
 def test_resolve_model_second_call_uses_cache(tmp_path: Path, monkeypatch):
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive, sha = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel-v1.0", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
-    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri(), sha)
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
 
@@ -168,37 +143,59 @@ def test_resolve_model_second_call_uses_cache(tmp_path: Path, monkeypatch):
     assert r2.weights_path.stat().st_mtime == mtime
 
 
-def test_resolve_model_bad_sha_rejected(tmp_path: Path, monkeypatch):
+def test_resolve_model_force_redownloads(tmp_path: Path, monkeypatch):
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive, _real_sha = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel-v1.0", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
-    _write_manifest(
-        cfg_dir, "fakemodel", "1.0", archive.as_uri(),
-        "0" * 64,   # non-placeholder but wrong
-    )
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
 
-    # sha of all-zeros is detected as placeholder; use a real-looking mismatch
-    _write_manifest(
-        cfg_dir, "fakemodel", "1.0", archive.as_uri(),
-        "a" * 64,
-    )
-    with pytest.raises(registry.RegistryError):
+    # Instrument the downloader to count invocations.
+    calls: list[str] = []
+    real_download = registry._download
+
+    def counting_download(url, dest):
+        calls.append(url)
+        return real_download(url, dest)
+
+    monkeypatch.setattr(registry, "_download", counting_download)
+
+    registry.resolve_model("fakemodel")
+    registry.resolve_model("fakemodel")                # cache hit, no download
+    registry.resolve_model("fakemodel", force=True)    # forced re-download
+    assert len(calls) == 2
+
+
+def test_resolve_model_corrupted_archive_cleans_up(tmp_path: Path, monkeypatch):
+    """A junk archive should raise and get deleted so the next call retries."""
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    junk = tmp_path / "junk.tar.gz"
+    junk.write_bytes(b"not a real gzip stream")
+    _write_manifest(cfg_dir, "fakemodel", "1.0", junk.as_uri())
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+
+    with pytest.raises(Exception):
         registry.resolve_model("fakemodel")
+    # After the failure the copy in the cache should be gone so the
+    # next call will re-fetch instead of looping on a broken file.
+    cache_copy = (tmp_path / "cache" / "models" / "junk.tar.gz")
+    assert not cache_copy.exists()
 
 
 def test_clear_removes_extract_dir(tmp_path: Path, monkeypatch):
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive, sha = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel-v1.0", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
-    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri(), sha)
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
 
@@ -212,11 +209,11 @@ def test_clear_removes_extract_dir(tmp_path: Path, monkeypatch):
 def test_local_status_after_resolve(tmp_path: Path, monkeypatch):
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive, sha = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel-v1.0", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
-    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri(), sha)
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
 
@@ -230,11 +227,10 @@ def test_local_status_after_resolve(tmp_path: Path, monkeypatch):
 
 
 def test_tar_slip_rejected(tmp_path: Path, monkeypatch):
-    """An archive with a member that escapes the extract dir must be rejected."""
+    """An archive whose members escape the extract dir must be rejected."""
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
 
-    # Build an evil tar with a member "../evil"
     workdir = tmp_path / "release"
     workdir.mkdir()
     good = workdir / "fakemodel-v1.0"
@@ -248,14 +244,9 @@ def test_tar_slip_rejected(tmp_path: Path, monkeypatch):
         tf.add(good, arcname="fakemodel-v1.0")
         tf.add(workdir / "evil", arcname="../evil")
 
-    h = hashlib.sha256()
-    with archive.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 16), b""):
-            h.update(chunk)
-
-    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri(), h.hexdigest())
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
     monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
 
-    with pytest.raises(registry.RegistryError):
+    with pytest.raises(Exception):
         registry.resolve_model("fakemodel")

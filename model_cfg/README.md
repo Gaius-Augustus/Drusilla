@@ -19,10 +19,11 @@ To publish a new model:
    cp path/to/best.weights.h5 vertebrates-v1.0/weights.h5
    cp path/to/arch.yaml       vertebrates-v1.0/arch.yaml
    tar -czf vertebrates-v1.0.tar.gz vertebrates-v1.0/
-   sha256sum vertebrates-v1.0.tar.gz
    ```
 2. Upload the tarball to a stable HTTPS location.
-3. Add / update a `<name>.yaml` here with the URL and SHA256.
+3. Add / update a `<name>.yaml` here with the URL. Bump `version` to
+   invalidate cached copies on client machines (the cache directory
+   name includes the version).
 
 To use a model manifest outside the bundled ones, set
 `DRUSILLA_MODEL_CFG_DIR` to a directory of extra `*.yaml` files (they

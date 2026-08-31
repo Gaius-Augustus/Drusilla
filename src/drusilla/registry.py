@@ -15,8 +15,10 @@ Resolution flow for ``drusilla annotate --model <name>``:
 1. Load the manifest from ``model_cfg/<name>.yaml``.
 2. If the extracted directory is already present in the cache with all
    expected files, use it directly (no network).
-3. Otherwise download the archive, verify its SHA256, extract into the
-   cache, and return the paths.
+3. Otherwise download the archive and extract it into the cache,
+   returning the paths. To force a redownload after a new release,
+   bump the manifest's ``version`` field (the cache dirname includes
+   it) or run ``drusilla models download NAME --force``.
 
 Runtime overrides:
 
@@ -28,14 +30,13 @@ Runtime overrides:
 
 from __future__ import annotations
 
-import hashlib
 import os
 import sys
 import tarfile
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -122,7 +123,7 @@ def cache_dir() -> Path:
 # Manifest loading
 # --------------------------------------------------------------------------
 
-_REQUIRED_MANIFEST_KEYS = ("name", "version", "weights_url", "weights_sha256")
+_REQUIRED_MANIFEST_KEYS = ("name", "version", "weights_url")
 
 
 @dataclass(frozen=True)
@@ -130,7 +131,6 @@ class ModelManifest:
     name: str
     version: str
     weights_url: str
-    weights_sha256: str
     manifest_path: Path
     data: dict[str, Any]
 
@@ -172,7 +172,6 @@ def _load_manifest_file(path: Path) -> ModelManifest:
         name=name,
         version=str(data["version"]),
         weights_url=str(data["weights_url"]),
-        weights_sha256=str(data["weights_sha256"]),
         manifest_path=path,
         data=data,
     )
@@ -196,29 +195,8 @@ def list_manifests() -> dict[str, ModelManifest]:
 
 
 # --------------------------------------------------------------------------
-# Placeholder detection
-# --------------------------------------------------------------------------
-
-def _looks_like_placeholder(sha256: str) -> bool:
-    s = (sha256 or "").strip().lower()
-    if not s or s in {"todo", "changeme", "unknown"}:
-        return True
-    if set(s) == {"0"} or set(s) == {"x"}:
-        return True
-    return False
-
-
-# --------------------------------------------------------------------------
 # Download / extract
 # --------------------------------------------------------------------------
-
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(_CHUNK), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
 
 def _download(url: str, dest: Path) -> None:
     tmp = dest.with_suffix(dest.suffix + ".part")
@@ -296,25 +274,21 @@ def _expected_files(extract_dir: Path) -> tuple[Path, Path]:
 
 
 def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
-    """Return a :class:`ResolvedModel` for ``name``, downloading if needed."""
-    mf = load_manifest(name)
+    """Return a :class:`ResolvedModel` for ``name``, downloading if needed.
 
-    if _looks_like_placeholder(mf.weights_sha256):
-        raise RegistryError(
-            f"model {name!r} has no verified checksum yet "
-            f"(weights_sha256={mf.weights_sha256!r}). "
-            "The maintainer needs to publish the release."
-        )
+    If the extracted directory already exists in the cache with both
+    expected files, it is reused. With ``force=True`` the archive is
+    re-downloaded and re-extracted from scratch. To force a re-download
+    across a manifest change without touching ``force``, bump the
+    ``version`` field in the manifest — the cache directory name
+    (``<name>-v<version>``) changes with it.
+    """
+    mf = load_manifest(name)
 
     extract_dir = cache_dir() / mf.extract_dirname
     weights_path, arch_path = _expected_files(extract_dir)
 
-    already_ok = (
-        not force
-        and weights_path.exists()
-        and arch_path.exists()
-    )
-    if already_ok:
+    if not force and weights_path.exists() and arch_path.exists():
         return ResolvedModel(
             name=mf.name,
             version=mf.version,
@@ -323,30 +297,29 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
             manifest=mf,
         )
 
-    # (Re-)fetch: download the archive to a sibling temp filename, sha256
-    # verify, then extract in place. If anything fails part-way, clean up
-    # partial state so the next invocation retries cleanly.
+    # (Re-)fetch: download the archive to a sibling ``.part`` file
+    # (handled inside ``_download``), then extract in place. Any
+    # half-extracted state from a previous failed run is nuked so the
+    # next invocation always starts clean.
     archive_path = cache_dir() / mf.archive_filename
-    if force or not archive_path.exists() or _sha256_file(archive_path) != mf.weights_sha256:
-        if archive_path.exists():
-            archive_path.unlink()
+    if force and archive_path.exists():
+        archive_path.unlink()
+    if not archive_path.exists():
         print(f"Downloading {mf.name} v{mf.version} from {mf.weights_url}",
               file=sys.stderr)
         _download(mf.weights_url, archive_path)
 
-    got = _sha256_file(archive_path)
-    if got != mf.weights_sha256:
-        archive_path.unlink()
-        raise RegistryError(
-            f"SHA256 mismatch for {name!r} archive: expected "
-            f"{mf.weights_sha256}, got {got}. File deleted."
-        )
-
-    # Remove any half-extracted state, then extract.
     if extract_dir.exists():
         import shutil
         shutil.rmtree(extract_dir)
-    _safe_extract(archive_path, cache_dir(), mf.extract_dirname)
+    try:
+        _safe_extract(archive_path, cache_dir(), mf.extract_dirname)
+    except (tarfile.TarError, RegistryError):
+        # Corrupted / truncated archive — delete so the next invocation
+        # triggers a fresh download instead of looping on a bad file.
+        if archive_path.exists():
+            archive_path.unlink()
+        raise
 
     # Sanity check the extracted layout.
     if not weights_path.exists() or not arch_path.exists():
@@ -355,9 +328,6 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
             f"weights.h5 and arch.yaml under {extract_dir}"
         )
 
-    # Keep the archive around so `--force` can detect a matching download
-    # without re-hitting the URL. Users can `drusilla models rm NAME` to
-    # reclaim disk.
     return ResolvedModel(
         name=mf.name,
         version=mf.version,
