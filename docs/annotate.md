@@ -57,7 +57,7 @@ Extra outputs, only produced when their flag is set:
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--batch-size N`         | 200 | NN inference batch size. |
+| `--batch-size N`         | auto | NN inference batch size. If omitted, auto-selected from the GPU memory (queried via `nvidia-smi`) and the model's `chunk_len`. Empirical anchors: 40 GB A100 -> ~180, 80 GB A100 -> ~360, smaller GPUs scale down. If `nvidia-smi` is unavailable the fallback is 8. Override any time with an explicit value. |
 | `--parallel N`           | 100 | HMM parallel-scan factor (chunks padded to a multiple of N). |
 | `--no-codon-emitter`     | off | Drop the hard ATG-at-START / not-stop-at-E2 / stop-at-STOP codon constraints (debug). |
 | `--restrict-start-to-ir-start` | off | Force the HMM's initial state distribution to `{IR, START}` (whole-transcript decode should never start mid-codon). |

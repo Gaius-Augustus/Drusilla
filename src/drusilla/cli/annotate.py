@@ -60,8 +60,10 @@ def add_args(ap: argparse.ArgumentParser) -> None:
 
     ap.add_argument("--out-dir", type=Path, required=True,
                     help="Directory for orfs.gtf and intermediates.")
-    ap.add_argument("--batch-size", type=int, default=200,
-                    help="Inference batch size (default 200).")
+    ap.add_argument("--batch-size", type=int, default=None,
+                    help="Inference batch size. If omitted, auto-selected "
+                         "from the detected GPU memory and the model's "
+                         "chunk_len (see drusilla.gpu.compute_auto_batch_size).")
     ap.add_argument("--parallel", type=int, default=100,
                     help="HMM parallel scan factor (default 100).")
     ap.add_argument("--no-codon-emitter", action="store_true",
@@ -472,6 +474,15 @@ def run(args: argparse.Namespace) -> int:
     cfg = yaml.safe_load(open(config_path))
     dc, mc = cfg["data"], cfg["model"]
     chunk_len = dc["chunk_len"]
+
+    # Resolve batch size (auto if not user-provided).
+    if args.batch_size is None:
+        from ..gpu import resolve_batch_size
+        args.batch_size, bs_source = resolve_batch_size(chunk_len)
+        print(f"[batch-size] {args.batch_size}  ({bs_source})", flush=True)
+    else:
+        print(f"[batch-size] {args.batch_size}  (user-supplied via --batch-size)",
+              flush=True)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     print(f"Workdir: {args.out_dir}", flush=True)

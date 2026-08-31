@@ -10,8 +10,11 @@ Under the hood: CNN + BiLSTM per-position classifier over
 that enforces ATG starts, in-frame stops, and a single canonical reading
 frame per ORF.
 
-Currently only a **vertebrate** model is released. Additional clade
-models will follow.
+> **Model availability.** Only the **vertebrate** model is released at
+> the moment (`--model vertebrates`, the default). Models for
+> other clades are in training and will be added to
+> [`models.yaml`](models.yaml) as they become available. See the
+> [Models](#models) section for the current release table.
 
 ---
 
