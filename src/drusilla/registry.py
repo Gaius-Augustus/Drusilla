@@ -141,8 +141,14 @@ class ModelManifest:
 
     @property
     def extract_dirname(self) -> str:
-        """The subdirectory name inside the cache after extraction."""
-        return f"{self.name}-v{self.version}"
+        """The subdirectory name inside the cache after extraction.
+
+        Uses the plain model name (no version suffix) so the on-disk
+        layout matches the archive's own top-level directory. Version
+        invalidation is handled via a ``.drusilla_version`` marker file
+        written into the extracted dir; see ``resolve_model``.
+        """
+        return self.name
 
 
 @dataclass(frozen=True)
@@ -273,6 +279,20 @@ def _expected_files(extract_dir: Path) -> tuple[Path, Path]:
     return extract_dir / "weights.h5", extract_dir / "arch.yaml"
 
 
+_VERSION_MARKER = ".drusilla_version"
+
+
+def _read_cached_version(extract_dir: Path) -> str | None:
+    marker = extract_dir / _VERSION_MARKER
+    if not marker.exists():
+        return None
+    return marker.read_text(encoding="utf-8").strip()
+
+
+def _write_cached_version(extract_dir: Path, version: str) -> None:
+    (extract_dir / _VERSION_MARKER).write_text(version, encoding="utf-8")
+
+
 def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
     """Return a :class:`ResolvedModel` for ``name``, downloading if needed.
 
@@ -288,7 +308,13 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
     extract_dir = cache_dir() / mf.extract_dirname
     weights_path, arch_path = _expected_files(extract_dir)
 
-    if not force and weights_path.exists() and arch_path.exists():
+    cached_version = _read_cached_version(extract_dir)
+    if (
+        not force
+        and weights_path.exists()
+        and arch_path.exists()
+        and cached_version == mf.version
+    ):
         return ResolvedModel(
             name=mf.name,
             version=mf.version,
@@ -296,6 +322,18 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
             arch_config_path=arch_path,
             manifest=mf,
         )
+
+    # Cache miss OR version mismatch (manifest bumped since last download).
+    if cached_version is not None and cached_version != mf.version:
+        print(
+            f"[registry] {mf.name}: cached version {cached_version} != "
+            f"manifest version {mf.version}; re-downloading.",
+            file=sys.stderr,
+        )
+        # Drop the stale archive too so we don't re-extract it.
+        stale_archive = cache_dir() / mf.archive_filename
+        if stale_archive.exists():
+            stale_archive.unlink()
 
     # (Re-)fetch: download the archive to a sibling ``.part`` file
     # (handled inside ``_download``), then extract in place. Any
@@ -327,6 +365,10 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
             f"model {name!r} archive did not contain the expected "
             f"weights.h5 and arch.yaml under {extract_dir}"
         )
+
+    # Stamp the extract dir with the manifest version so a later
+    # version bump gets detected automatically on the next resolve.
+    _write_cached_version(extract_dir, mf.version)
 
     return ResolvedModel(
         name=mf.name,

@@ -109,7 +109,7 @@ def test_resolve_model_downloads_and_extracts(tmp_path: Path, monkeypatch):
     """End-to-end: manifest + tar.gz -> extracted cache with correct paths."""
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
@@ -129,7 +129,7 @@ def test_resolve_model_downloads_and_extracts(tmp_path: Path, monkeypatch):
 def test_resolve_model_second_call_uses_cache(tmp_path: Path, monkeypatch):
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
@@ -146,7 +146,7 @@ def test_resolve_model_second_call_uses_cache(tmp_path: Path, monkeypatch):
 def test_resolve_model_force_redownloads(tmp_path: Path, monkeypatch):
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
@@ -167,6 +167,37 @@ def test_resolve_model_force_redownloads(tmp_path: Path, monkeypatch):
     registry.resolve_model("fakemodel")
     registry.resolve_model("fakemodel")                # cache hit, no download
     registry.resolve_model("fakemodel", force=True)    # forced re-download
+    assert len(calls) == 2
+
+
+def test_resolve_model_reextracts_on_version_bump(tmp_path: Path, monkeypatch):
+    """Bumping the manifest version should trigger a re-download."""
+    workdir = tmp_path / "release"
+    workdir.mkdir()
+    archive = _make_fake_archive("fakemodel", workdir)
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+
+    calls: list[str] = []
+    real_download = registry._download
+
+    def counting_download(url, dest):
+        calls.append(url)
+        return real_download(url, dest)
+
+    monkeypatch.setattr(registry, "_download", counting_download)
+
+    registry.resolve_model("fakemodel")
+    registry.resolve_model("fakemodel")   # cached: no download
+    assert len(calls) == 1
+
+    # Bump version in the manifest.
+    _write_manifest(cfg_dir, "fakemodel", "1.1", archive.as_uri())
+    registry.resolve_model("fakemodel")   # version mismatch: re-download
     assert len(calls) == 2
 
 
@@ -191,7 +222,7 @@ def test_resolve_model_corrupted_archive_cleans_up(tmp_path: Path, monkeypatch):
 def test_clear_removes_extract_dir(tmp_path: Path, monkeypatch):
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
@@ -209,7 +240,7 @@ def test_clear_removes_extract_dir(tmp_path: Path, monkeypatch):
 def test_local_status_after_resolve(tmp_path: Path, monkeypatch):
     workdir = tmp_path / "release"
     workdir.mkdir()
-    archive = _make_fake_archive("fakemodel-v1.0", workdir)
+    archive = _make_fake_archive("fakemodel", workdir)
 
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
@@ -233,15 +264,15 @@ def test_tar_slip_rejected(tmp_path: Path, monkeypatch):
 
     workdir = tmp_path / "release"
     workdir.mkdir()
-    good = workdir / "fakemodel-v1.0"
+    good = workdir / "fakemodel"
     good.mkdir()
     (good / "weights.h5").write_bytes(b"ok")
     (good / "arch.yaml").write_text("data: {}\nmodel: {}\n")
     (workdir / "evil").write_text("pwned")
 
-    archive = workdir / "fakemodel-v1.0.tar.gz"
+    archive = workdir / "fakemodel.tar.gz"
     with tarfile.open(archive, "w:gz") as tf:
-        tf.add(good, arcname="fakemodel-v1.0")
+        tf.add(good, arcname="fakemodel")
         tf.add(workdir / "evil", arcname="../evil")
 
     _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
