@@ -170,6 +170,51 @@ def test_resolve_model_force_redownloads(tmp_path: Path, monkeypatch):
     assert len(calls) == 2
 
 
+def test_resolve_model_renames_weights_h5_for_keras3(tmp_path: Path, monkeypatch):
+    """Archives containing plain 'weights.h5' should be normalised to
+    '*.weights.h5' after extract so Keras 3's format dispatch picks the
+    new-format loader."""
+    workdir = tmp_path / "release"
+    workdir.mkdir()
+    archive = _make_fake_archive("fakemodel", workdir)   # contains weights.h5
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+
+    resolved = registry.resolve_model("fakemodel")
+    assert resolved.weights_path.name.endswith(".weights.h5"), (
+        f"expected a *.weights.h5 filename, got {resolved.weights_path.name}"
+    )
+    # And the plain weights.h5 should be gone (it was renamed in place).
+    assert not (resolved.weights_path.parent / "weights.h5").exists()
+
+
+def test_resolve_model_accepts_prenamed_weights_file(tmp_path: Path, monkeypatch):
+    """An archive whose weights file already ends in .weights.h5 is used as-is."""
+    workdir = tmp_path / "release"
+    workdir.mkdir()
+    dir_name = "fakemodel"
+    extract_root = workdir / dir_name
+    extract_root.mkdir()
+    (extract_root / "custom.weights.h5").write_bytes(b"payload")
+    (extract_root / "arch.yaml").write_text("data: {chunk_len: 9999}\nmodel: {type: cnn_lstm}\n")
+    archive = workdir / f"{dir_name}.tar.gz"
+    with tarfile.open(archive, "w:gz") as tf:
+        tf.add(extract_root, arcname=dir_name)
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+
+    resolved = registry.resolve_model("fakemodel")
+    assert resolved.weights_path.name == "custom.weights.h5"
+
+
 def test_resolve_model_reextracts_on_version_bump(tmp_path: Path, monkeypatch):
     """Bumping the manifest version should trigger a re-download."""
     workdir = tmp_path / "release"

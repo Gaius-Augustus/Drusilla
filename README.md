@@ -170,12 +170,6 @@ larger data-generation pipeline, described separately in
 
 ---
 
-## Citation
-
-If you use Drusilla, please cite:
-
-> Gabriel L. et al. Drusilla: deep-learning ORF annotator for
-> RNA-seq assembled transcripts. In preparation.
 
 ## License
 

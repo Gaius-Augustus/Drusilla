@@ -275,8 +275,40 @@ def _safe_extract(archive: Path, dest_parent: Path, expected_dirname: str) -> Pa
     return extracted
 
 
-def _expected_files(extract_dir: Path) -> tuple[Path, Path]:
-    return extract_dir / "weights.h5", extract_dir / "arch.yaml"
+_CANONICAL_WEIGHTS_NAME = "model.weights.h5"
+
+
+def _resolve_weights_path(extract_dir: Path) -> Path | None:
+    """Return the path to the Keras weights file inside ``extract_dir``.
+
+    Keras 3 chooses the H5 loader based on the filename suffix:
+      * ``*.weights.h5`` -> new hierarchical loader
+      * plain ``*.h5``   -> legacy loader
+    Files saved by ``ModelCheckpoint(save_weights_only=True)`` on a name
+    ending in ``.weights.h5`` use the *new* format on disk. If such a
+    file is later renamed to plain ``weights.h5``, the legacy loader
+    picks it up and fails with "0 saved layers".
+
+    To insulate publishers from this pitfall we accept either naming in
+    the archive and normalise to ``model.weights.h5`` on extract.
+    """
+    canonical = extract_dir / _CANONICAL_WEIGHTS_NAME
+    if canonical.exists():
+        return canonical
+    # Any user-shipped .weights.h5 file is already in the right format.
+    for candidate in sorted(extract_dir.glob("*.weights.h5")):
+        return candidate
+    # Rename plain weights.h5 -> model.weights.h5 so Keras 3 picks the
+    # new-format loader.
+    legacy = extract_dir / "weights.h5"
+    if legacy.exists():
+        legacy.rename(canonical)
+        return canonical
+    return None
+
+
+def _expected_files(extract_dir: Path) -> tuple[Path | None, Path]:
+    return _resolve_weights_path(extract_dir), extract_dir / "arch.yaml"
 
 
 _VERSION_MARKER = ".drusilla_version"
@@ -311,7 +343,7 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
     cached_version = _read_cached_version(extract_dir)
     if (
         not force
-        and weights_path.exists()
+        and weights_path is not None
         and arch_path.exists()
         and cached_version == mf.version
     ):
@@ -359,11 +391,13 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
             archive_path.unlink()
         raise
 
-    # Sanity check the extracted layout.
-    if not weights_path.exists() or not arch_path.exists():
+    # Re-resolve after extract: _resolve_weights_path may rename
+    # weights.h5 -> model.weights.h5 for Keras 3 compatibility.
+    weights_path, arch_path = _expected_files(extract_dir)
+    if weights_path is None or not arch_path.exists():
         raise RegistryError(
-            f"model {name!r} archive did not contain the expected "
-            f"weights.h5 and arch.yaml under {extract_dir}"
+            f"model {name!r} archive must contain a *.weights.h5 (or "
+            f"weights.h5) file and arch.yaml under {extract_dir}"
         )
 
     # Stamp the extract dir with the manifest version so a later
@@ -400,7 +434,7 @@ def local_status(name: str) -> dict[str, Any]:
     mf = load_manifest(name)
     extract_dir = cache_dir() / mf.extract_dirname
     weights_path, arch_path = _expected_files(extract_dir)
-    cached = weights_path.exists() and arch_path.exists()
+    cached = weights_path is not None and arch_path.exists()
     return {
         "name": name,
         "version": mf.version,
