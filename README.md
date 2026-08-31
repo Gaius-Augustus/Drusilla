@@ -73,6 +73,28 @@ Output (in `--out-dir`):
 
 See [docs/annotate.md](docs/annotate.md) for the full flag reference.
 
+### Optional subsequence-isoform collapse
+
+Multi-isoform StringTie assemblies often produce many isoforms whose
+predicted CDS is a sub-sequence of another isoform's. Collapse them
+with either an inline post-step:
+
+```bash
+drusilla annotate ... --subseq-collapse   # writes orfs.filtered.gtf
+```
+
+or the standalone command, on any prediction GTF:
+
+```bash
+drusilla filter-subseq \
+  --orfs-gtf    orfs.gtf \
+  --out-gtf     orfs.filtered.gtf \
+  --report-tsv  orfs.dropped_subseq.tsv
+```
+
+See [docs/filter_subseq.md](docs/filter_subseq.md) for matching rules
+and tolerance flags.
+
 ---
 
 ## Models

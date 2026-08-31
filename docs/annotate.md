@@ -98,6 +98,20 @@ Typical short-read defaults: `--min-cov 3 --min-tpm 1 --drop-unstranded`.
 | `--partial5-out FILE`    | Also write 5'-truncated ORFs (`E*` at position 0, ending at a STOP; no upstream ATG). |
 | `--lorf-class`           | Add a `lorf_class` GTF attribute per ORF (`LORF_UPSTOP` / `sORF_UPSTOP` / `upLORF` / `LORF_NOUPSTOP`). Requires loading transcript sequences into memory. |
 
+### Subsequence-isoform collapse (optional post-step)
+
+After annotation, drop predicted isoforms whose spliced CDS is a
+(near-)sub-sequence of another isoform in the same StringTie locus (locus
+= `transcript_id` minus the trailing `.<iso>`). The same collapse is
+available as a standalone command — see [filter_subseq.md](filter_subseq.md).
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--subseq-collapse`               | off | Enable the post-step. Writes `orfs.filtered.gtf` and `orfs.dropped_subseq.tsv` alongside `orfs.gtf`. |
+| `--subseq-terminal-overhang-nt N` | 0   | Nt of overhang allowed at leftmost/rightmost CDS block past the matched keeper block. |
+| `--subseq-splice-shift-nt N`      | 0   | Nt of tolerance at each side of an interior CDS block boundary. Must be a multiple of 3 (frame-preserving). |
+| `--subseq-allow-exon-skip`        | off | Allow the dropped isoform's exons to be a non-contiguous ordered subset of the keeper's exons. |
+
 ## Examples
 
 Short-read short-assembly on a single sample, defaults:

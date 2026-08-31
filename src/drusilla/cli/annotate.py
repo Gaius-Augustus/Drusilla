@@ -109,6 +109,22 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                     help="Annotate each ORF with its LORF class (LORF_UPSTOP / "
                          "sORF_UPSTOP / upLORF / LORF_NOUPSTOP) as a GTF attr.")
 
+    # Post-step: collapse subsequence isoforms.
+    ap.add_argument("--subseq-collapse", action="store_true",
+                    help="After annotation, drop predicted isoforms whose CDS "
+                         "is a (near-)sub-sequence of another isoform in the "
+                         "same StringTie locus. Writes orfs.filtered.gtf and "
+                         "orfs.dropped_subseq.tsv alongside orfs.gtf.")
+    ap.add_argument("--subseq-terminal-overhang-nt", type=int, default=0,
+                    help="With --subseq-collapse: overhang tolerance at "
+                         "leftmost/rightmost CDS block (default 0 = strict).")
+    ap.add_argument("--subseq-splice-shift-nt", type=int, default=0,
+                    help="With --subseq-collapse: interior boundary tolerance "
+                         "(must be a multiple of 3; default 0 = strict).")
+    ap.add_argument("--subseq-allow-exon-skip", action="store_true",
+                    help="With --subseq-collapse: allow A's exons to be a "
+                         "non-contiguous ordered subset of B's exons.")
+
 
 def _enable_gpu_memory_growth() -> None:
     import tensorflow as tf
@@ -771,6 +787,26 @@ def run(args: argparse.Namespace) -> int:
                         fh.write(line + "\n")
                     n_partial5 += 1
         print(f"5'-partial ORFs: {n_partial5} -> {args.partial5_out}", flush=True)
+
+    if args.subseq_collapse:
+        from ..postprocess.subseq_filter import run_filter
+
+        filt_gtf = args.out_dir / "orfs.filtered.gtf"
+        report_tsv = args.out_dir / "orfs.dropped_subseq.tsv"
+        stats = run_filter(
+            orfs_gtf=out_gtf,
+            out_gtf=filt_gtf,
+            report_tsv=report_tsv,
+            terminal_overhang_nt=args.subseq_terminal_overhang_nt,
+            splice_shift_nt=args.subseq_splice_shift_nt,
+            allow_exon_skip=args.subseq_allow_exon_skip,
+        )
+        print(
+            f"subseq-collapse: input tx={stats['n_input_tx']} "
+            f"dropped={stats['n_dropped_tx']} ({stats['pct_dropped']:.1f}%) "
+            f"kept={stats['n_kept_tx']} -> {filt_gtf}",
+            flush=True,
+        )
 
     if not args.keep_tmp:
         for f in (intermediate_gtf, args.out_dir / "transcripts.fa",

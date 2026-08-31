@@ -25,6 +25,7 @@ def _build_parser() -> argparse.ArgumentParser:
     from . import annotate as _annotate
     from . import train as _train
     from . import models as _models
+    from . import filter_subseq as _filter_subseq
 
     p_ann = sub.add_parser("annotate", help="Annotate a transcriptome with predicted ORFs.")
     _annotate.add_args(p_ann)
@@ -37,6 +38,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_md = sub.add_parser("models", help="Inspect and manage local model cache.")
     _models.add_args(p_md)
     p_md.set_defaults(_func=_models.run)
+
+    p_fs = sub.add_parser(
+        "filter-subseq",
+        help="Drop predicted isoforms whose CDS is a sub-sequence of another.",
+    )
+    _filter_subseq.add_args(p_fs)
+    p_fs.set_defaults(_func=_filter_subseq.run)
 
     return ap
 
