@@ -449,20 +449,45 @@ def _make_predict_func(
 
 
 def _resolve_model_paths(args: argparse.Namespace) -> tuple[Path, Path]:
-    """Resolve (weights, config) from --weights/--model/--config."""
+    """Resolve (weights, arch_config) from --weights/--model/--config.
+
+    Precedence:
+      * ``--weights FILE`` + ``--config FILE`` — local override (advanced use).
+        Both are required together; the arch config travels with released
+        models, so a local checkpoint needs its own.
+      * ``--model NAME`` (or the default ``vertebrates``) — resolve via the
+        registry. Downloads and extracts the archive on first use; returns
+        the paths to the extracted ``weights.h5`` and ``arch.yaml``.
+    """
     from .. import registry
 
     if args.weights is not None:
         if args.config is None:
             raise SystemExit(
-                "--config is required when --weights is used (need architecture)."
+                "--config is required when --weights is used "
+                "(the architecture config is not carried in .weights.h5)."
             )
         return args.weights, args.config
 
     name = args.model or "vertebrates"
-    weights = registry.resolve_weights(name)
-    config = args.config if args.config is not None else registry.resolve_config(name)
-    return weights, config
+    resolved = registry.resolve_model(name)
+    # --config is not needed for a registered model (arch.yaml ships in the
+    # archive). Warn if user passed both, use the local one.
+    if args.config is not None:
+        print(
+            f"note: --config {args.config} overrides the arch config that "
+            f"ships with model {name!r}.",
+            flush=True,
+        )
+        arch_config = args.config
+    else:
+        arch_config = resolved.arch_config_path
+    print(
+        f"[model] {resolved.name} v{resolved.version}  "
+        f"weights={resolved.weights_path}  arch={arch_config}",
+        flush=True,
+    )
+    return resolved.weights_path, arch_config
 
 
 def run(args: argparse.Namespace) -> int:

@@ -47,9 +47,9 @@ Issues = "https://github.com/Gaius-Augustus/Drusilla/issues"
 packages = ["src/drusilla"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"models.yaml" = "drusilla/_bundled/models.yaml"
-"configs/default.yaml" = "drusilla/_bundled/configs/default.yaml"
-"configs/vertebrates.yaml" = "drusilla/_bundled/configs/vertebrates.yaml"
+"model_cfg/vertebrates.yaml" = "drusilla/_bundled/model_cfg/vertebrates.yaml"
+"configs/default.yaml"       = "drusilla/_bundled/configs/default.yaml"
+"configs/vertebrates.yaml"   = "drusilla/_bundled/configs/vertebrates.yaml"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

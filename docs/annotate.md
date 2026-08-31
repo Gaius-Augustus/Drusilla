@@ -25,11 +25,19 @@ Exactly one path chooses the model:
 | Flag | Meaning |
 |---|---|
 | _(default)_             | Uses `--model vertebrates`. |
-| `--model NAME`          | Registered model (see `drusilla models list`). Weights auto-downloaded on first use. |
-| `--weights FILE`        | Local `.weights.h5`. Requires `--config FILE` to describe the architecture. |
+| `--model NAME`          | Registered model (see `drusilla models list`). On first use, downloads the `.tar.gz` archive, verifies its SHA256, and extracts to the cache. Both weights and architecture config come from the archive — no `--config` needed. |
+| `--weights FILE`        | Local `.weights.h5`. Requires `--config FILE` alongside it (the architecture is not carried inside `.weights.h5`). |
 
-The `--config` flag is auto-selected from the registry when `--model` is
-used. Only override it if you know what you're doing.
+If you pass `--config` together with `--model`, the local config
+overrides the arch config that ships in the model archive. Only useful
+when you know exactly what you're doing.
+
+> **Currently available: `vertebrates` only.** Other clade models
+> (embryophyta, fungi, insecta, …) are in training. See the
+> [Models table in the README](../README.md#models) for status. To use
+> Drusilla on a non-vertebrate species today, either train a model with
+> `drusilla train` (see [training.md](training.md)) or supply your own
+> weights via `--weights` / `--config`.
 
 ## Output
 

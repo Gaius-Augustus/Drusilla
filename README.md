@@ -64,22 +64,17 @@ drusilla annotate \
 For PacBio Iso-Seq / ONT spliced BAMs add `--longread` (passes `-L` to
 StringTie).
 
-Output (in `--out-dir`):
-
-- `orfs.gtf` — the predicted CDS annotation (1-based inclusive
-  coordinates, `source = "drusilla"`, one CDS line per genomic
-  sub-interval of every predicted ORF, shared `transcript_id` /
-  `gene_id` per ORF).
-- `orfs.log` — b2m annotation log.
-- Intermediate StringTie / gffread output (deleted unless
-  `--keep-tmp` is set).
-
 Output (in `--out-dir`) by default:
 
-- `orfs.gtf` — **primary**, genomic-coordinate CDS lines, subsequence
-  collapse applied.
+- `orfs.gtf` — **primary**, genomic-coordinate CDS lines
+  (1-based inclusive, `source = "drusilla"`, one CDS line per genomic
+  sub-interval of every predicted ORF, shared `transcript_id` /
+  `gene_id` per ORF), subsequence-isoform collapse applied.
 - `orfs_local.gtf` — same predictions in transcript coordinates.
 - `orfs.log` — b2m annotation log.
+
+Intermediate StringTie / gffread output is deleted unless `--keep-tmp`
+is set.
 
 See [docs/annotate.md](docs/annotate.md) for the full flag reference.
 
@@ -110,8 +105,29 @@ and tolerance flags.
 
 ## Models
 
-Model weights are hosted separately and downloaded on demand. Available
-models and their local cache status:
+Only the **vertebrate** model is released today. Other clades are in
+training; this table will grow as they land in [`models.yaml`](models.yaml).
+
+| Name (`--model`)   | Clade / target      | Status         | Architecture       | Notes |
+|--------------------|---------------------|----------------|--------------------|-------|
+| `vertebrates`      | Vertebrata          | **Released**   | CNN + BiLSTM (6-state HMM head) | Default. Trained on 51 vertebrate species; validated on 4 held-out species. |
+| `embryophyta`      | Land plants         | In training    | —                  | Planned. |
+| `fungi`            | Fungi               | In training    | —                  | Planned. |
+| `insecta`          | Insects             | Planned        | —                  | — |
+
+Applying a released model to species from another clade is technically
+possible but the predictions are not benchmarked and will underperform.
+Wait for the matching clade release, or train your own with
+`drusilla train` (see [docs/training.md](docs/training.md)).
+
+Model releases are described by per-model manifests under
+[`model_cfg/`](model_cfg/) (one YAML per model — see
+[`model_cfg/README.md`](model_cfg/README.md) for the schema and how to
+publish a new release). Each manifest points at a `.tar.gz` archive
+that bundles both the weights and their architecture config, so
+released models are always internally consistent.
+
+List available models and their local cache status:
 
 ```bash
 drusilla models list
@@ -123,13 +139,12 @@ Download a specific model without running annotate:
 drusilla models download vertebrates
 ```
 
-Weights are cached under `$XDG_CACHE_HOME/drusilla/models/`
+Downloaded archives are verified against the manifest's SHA256, then
+extracted to `$XDG_CACHE_HOME/drusilla/models/<name>-v<version>/`
 (default: `~/.cache/drusilla/models/`). Set `DRUSILLA_CACHE_DIR` to
-override.
-
-To point Drusilla at a different registry (for testing new releases or
-using a mirror), set `DRUSILLA_MODELS_URL` to a URL that returns a YAML
-document with the same schema as the bundled `models.yaml`.
+override the cache location, or `DRUSILLA_MODEL_CFG_DIR` to add a
+directory of extra manifests (useful for staging a new release without
+editing the package).
 
 ---
 

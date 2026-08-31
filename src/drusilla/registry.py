@@ -1,55 +1,104 @@
-"""Model registry: locate, download, and verify Drusilla model weights.
+"""Model registry — Tiberius-style per-model YAML manifests + tar.gz archives.
 
-The registry itself is a small YAML document that ships with the package
-at ``drusilla/_bundled/models.yaml``. It maps a short model name (e.g.
-``vertebrates``) to a download URL, SHA256 checksum, and the training
-config filename to use for architecture reconstruction.
+Each released model is described by a `model_cfg/<name>.yaml` file
+(bundled with the package, plus optional overrides — see
+``DRUSILLA_MODEL_CFG_DIR``). The manifest's ``weights_url`` points at a
+``.tar.gz`` archive whose contents extract to a directory
+``<name>-v<version>/`` containing:
+
+    weights.h5   Keras weights file
+    arch.yaml    architecture / data config (parsed by
+                 ``drusilla.model.model.build_model_from_config``)
+
+Resolution flow for ``drusilla annotate --model <name>``:
+
+1. Load the manifest from ``model_cfg/<name>.yaml``.
+2. If the extracted directory is already present in the cache with all
+   expected files, use it directly (no network).
+3. Otherwise download the archive, verify its SHA256, extract into the
+   cache, and return the paths.
 
 Runtime overrides:
 
-* ``DRUSILLA_MODELS_URL``  - fetch the registry YAML from this URL instead
-  of the bundled copy. Useful for testing new releases without repackaging.
-* ``DRUSILLA_CACHE_DIR``   - override the cache directory
+* ``DRUSILLA_MODEL_CFG_DIR`` — extra directory of ``*.yaml`` files that
+  shadow / add to the bundled manifests.
+* ``DRUSILLA_CACHE_DIR`` — override the cache directory
   (default: ``$XDG_CACHE_HOME/drusilla`` or ``~/.cache/drusilla``).
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import os
-import shutil
 import sys
+import tarfile
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import yaml
 
 
-DEFAULT_REGISTRY_RESOURCE = "models.yaml"
-_CHUNK = 1 << 20  # 1 MiB read chunks for streaming download
+_CHUNK = 1 << 20  # 1 MiB stream chunk
 
 
-@dataclass(frozen=True)
-class ModelEntry:
-    name: str
-    version: str
-    weights_url: str
-    weights_sha256: str
-    config: str
-    clades: list[str]
-    description: str
-
-    @property
-    def filename(self) -> str:
-        """Canonical local filename for the cached weights."""
-        return f"{self.name}-v{self.version}.weights.h5"
-
+# --------------------------------------------------------------------------
+# Errors
+# --------------------------------------------------------------------------
 
 class RegistryError(RuntimeError):
     pass
+
+
+# --------------------------------------------------------------------------
+# Bundled + user model_cfg directories
+# --------------------------------------------------------------------------
+
+def _bundled_model_cfg_dirs() -> list[Path]:
+    """Directories that may hold bundled ``model_cfg/*.yaml`` files.
+
+    Editable-install fallback climbs up from the source tree; wheel
+    installs place the files under ``drusilla/_bundled/model_cfg/``.
+    """
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parent / "_bundled" / "model_cfg",   # wheel install
+        here.parents[2] / "model_cfg",            # editable install (repo root)
+        here.parents[3] / "model_cfg",            # editable install (parent)
+    ]
+    return [p for p in candidates if p.is_dir()]
+
+
+def _user_model_cfg_dirs() -> list[Path]:
+    env = os.environ.get("DRUSILLA_MODEL_CFG_DIR")
+    if not env:
+        return []
+    paths = []
+    for chunk in env.split(os.pathsep):
+        chunk = chunk.strip()
+        if chunk:
+            p = Path(chunk).expanduser()
+            if p.is_dir():
+                paths.append(p)
+    return paths
+
+
+def _all_model_cfg_files() -> dict[str, Path]:
+    """Return ``{name: yaml_path}``, later directories overriding earlier ones.
+
+    The lookup order is: bundled → user override (env var). This lets
+    a developer point ``DRUSILLA_MODEL_CFG_DIR`` at their own directory
+    to test a new release without editing the package.
+    """
+    out: dict[str, Path] = {}
+    for d in _bundled_model_cfg_dirs():
+        for p in sorted(d.glob("*.yaml")):
+            out[p.stem] = p
+    for d in _user_model_cfg_dirs():
+        for p in sorted(d.glob("*.yaml")):
+            out[p.stem] = p
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -57,7 +106,7 @@ class RegistryError(RuntimeError):
 # --------------------------------------------------------------------------
 
 def cache_dir() -> Path:
-    """Return the Drusilla cache directory (created on demand)."""
+    """Return the Drusilla models cache directory (created on demand)."""
     override = os.environ.get("DRUSILLA_CACHE_DIR")
     if override:
         base = Path(override)
@@ -70,78 +119,97 @@ def cache_dir() -> Path:
 
 
 # --------------------------------------------------------------------------
-# Registry loading
+# Manifest loading
 # --------------------------------------------------------------------------
 
-def _repo_root_candidates() -> list[Path]:
-    """Editable-install fallback: look for repo-root models.yaml / configs."""
-    here = Path(__file__).resolve()
-    return [here.parents[2], here.parents[3]]
+_REQUIRED_MANIFEST_KEYS = ("name", "version", "weights_url", "weights_sha256")
 
 
-def _bundled_registry_path() -> Path:
-    p = Path(__file__).parent / "_bundled" / DEFAULT_REGISTRY_RESOURCE
-    if p.exists():
-        return p
-    for root in _repo_root_candidates():
-        alt = root / DEFAULT_REGISTRY_RESOURCE
-        if alt.exists():
-            return alt
-    return p
+@dataclass(frozen=True)
+class ModelManifest:
+    name: str
+    version: str
+    weights_url: str
+    weights_sha256: str
+    manifest_path: Path
+    data: dict[str, Any]
+
+    @property
+    def archive_filename(self) -> str:
+        """The archive filename, taken from the URL."""
+        return self.weights_url.rsplit("/", 1)[-1] or f"{self.name}-v{self.version}.tar.gz"
+
+    @property
+    def extract_dirname(self) -> str:
+        """The subdirectory name inside the cache after extraction."""
+        return f"{self.name}-v{self.version}"
 
 
-def _load_registry_yaml() -> dict[str, Any]:
-    url = os.environ.get("DRUSILLA_MODELS_URL")
-    if url:
-        try:
-            with urllib.request.urlopen(url, timeout=30) as fh:
-                text = fh.read().decode("utf-8")
-        except Exception as e:
-            raise RegistryError(f"failed to fetch DRUSILLA_MODELS_URL={url}: {e}") from e
-        return yaml.safe_load(text) or {}
-    path = _bundled_registry_path()
-    if not path.exists():
-        raise RegistryError(
-            f"bundled registry not found at {path}. "
-            "Reinstall the package or set DRUSILLA_MODELS_URL."
-        )
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+@dataclass(frozen=True)
+class ResolvedModel:
+    """Local, on-disk paths for a fully-resolved (downloaded + extracted) model."""
+    name: str
+    version: str
+    weights_path: Path
+    arch_config_path: Path
+    manifest: ModelManifest
 
 
-def load_registry() -> dict[str, ModelEntry]:
-    """Parse the registry YAML into ``{name: ModelEntry}``."""
-    doc = _load_registry_yaml()
-    entries: dict[str, ModelEntry] = {}
-    for name, meta in (doc.get("models") or {}).items():
-        try:
-            entries[name] = ModelEntry(
-                name=name,
-                version=str(meta["version"]),
-                weights_url=str(meta["weights_url"]),
-                weights_sha256=str(meta["weights_sha256"]),
-                config=str(meta.get("config", "default.yaml")),
-                clades=list(meta.get("clades", []) or []),
-                description=str(meta.get("description", "")),
-            )
-        except KeyError as e:
+def _load_manifest_file(path: Path) -> ModelManifest:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    for k in _REQUIRED_MANIFEST_KEYS:
+        if not data.get(k):
             raise RegistryError(
-                f"model {name!r} missing required field {e}"
-            ) from e
-    return entries
+                f"model manifest {path} is missing required field {k!r}"
+            )
+    name = str(data["name"])
+    if name != path.stem:
+        raise RegistryError(
+            f"model manifest {path}: name field {name!r} does not match "
+            f"filename stem {path.stem!r}"
+        )
+    return ModelManifest(
+        name=name,
+        version=str(data["version"]),
+        weights_url=str(data["weights_url"]),
+        weights_sha256=str(data["weights_sha256"]),
+        manifest_path=path,
+        data=data,
+    )
 
 
-def get_entry(name: str) -> ModelEntry:
-    entries = load_registry()
-    if name not in entries:
-        available = ", ".join(sorted(entries)) or "(none)"
+def load_manifest(name: str) -> ModelManifest:
+    """Load the manifest for ``name`` from the bundled + user model_cfg dirs."""
+    files = _all_model_cfg_files()
+    if name not in files:
+        available = ", ".join(sorted(files)) or "(none)"
         raise RegistryError(
             f"unknown model {name!r}. Available: {available}"
         )
-    return entries[name]
+    return _load_manifest_file(files[name])
+
+
+def list_manifests() -> dict[str, ModelManifest]:
+    """Return ``{name: ModelManifest}`` for every discovered model."""
+    return {name: _load_manifest_file(p)
+            for name, p in _all_model_cfg_files().items()}
 
 
 # --------------------------------------------------------------------------
-# Download / verify
+# Placeholder detection
+# --------------------------------------------------------------------------
+
+def _looks_like_placeholder(sha256: str) -> bool:
+    s = (sha256 or "").strip().lower()
+    if not s or s in {"todo", "changeme", "unknown"}:
+        return True
+    if set(s) == {"0"} or set(s) == {"x"}:
+        return True
+    return False
+
+
+# --------------------------------------------------------------------------
+# Download / extract
 # --------------------------------------------------------------------------
 
 def _sha256_file(path: Path) -> str:
@@ -152,22 +220,18 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _looks_like_placeholder(sha256: str) -> bool:
-    """Detect obvious placeholder hashes so we fail with a clear message."""
-    s = sha256.strip().lower()
-    if not s or s in {"todo", "changeme", "unknown"}:
-        return True
-    if set(s) == {"0"} or set(s) == {"x"}:
-        return True
-    return False
-
-
 def _download(url: str, dest: Path) -> None:
-    """Stream ``url`` into ``dest`` (writes to ``dest.part`` and renames)."""
     tmp = dest.with_suffix(dest.suffix + ".part")
     try:
         with urllib.request.urlopen(url, timeout=60) as resp:
-            total = resp.length
+            # resp.length is an HTTP-only convenience; file:// responses
+            # don't have it. Fall back to Content-Length or None.
+            total: int | None = getattr(resp, "length", None)
+            if total is None:
+                try:
+                    total = int(resp.headers.get("Content-Length") or 0) or None
+                except (AttributeError, TypeError, ValueError):
+                    total = None
             written = 0
             with tmp.open("wb") as out:
                 while True:
@@ -184,7 +248,8 @@ def _download(url: str, dest: Path) -> None:
                             f"({pct:.1f}%)",
                             end="\r", flush=True, file=sys.stderr,
                         )
-        print("", file=sys.stderr)
+        if total:
+            print("", file=sys.stderr)
         tmp.replace(dest)
     except Exception:
         if tmp.exists():
@@ -192,78 +257,143 @@ def _download(url: str, dest: Path) -> None:
         raise
 
 
-def resolve_weights(name: str, *, force: bool = False) -> Path:
-    """Return the local path to ``name``'s weights, downloading if needed.
+def _safe_extract(archive: Path, dest_parent: Path, expected_dirname: str) -> Path:
+    """Extract ``archive`` under ``dest_parent`` and return the extracted directory.
 
-    If the file already exists and its SHA256 matches the registry entry,
-    it is reused. If ``force`` is True, the cached copy is re-downloaded.
+    Guards against path-traversal ('tar-slip') by rejecting members whose
+    resolved path escapes ``dest_parent``. Also refuses archives that
+    don't produce the expected top-level directory ``<name>-v<version>/``.
     """
-    entry = get_entry(name)
-    if _looks_like_placeholder(entry.weights_sha256):
+    dest_parent = dest_parent.resolve()
+    with tarfile.open(archive, mode="r:*") as tf:
+        for member in tf.getmembers():
+            member_path = (dest_parent / member.name).resolve()
+            try:
+                member_path.relative_to(dest_parent)
+            except ValueError:
+                raise RegistryError(
+                    f"archive {archive} contains unsafe path {member.name!r}"
+                )
+        # filter='data' (Python 3.12+) blocks unsafe members (device
+        # files, absolute paths, symlinks escaping the extract root).
+        # Our loop above already guards against path traversal but this
+        # is a second belt: safer AND silences the 3.14 default warning.
+        try:
+            tf.extractall(dest_parent, filter="data")
+        except TypeError:
+            tf.extractall(dest_parent)
+    extracted = dest_parent / expected_dirname
+    if not extracted.is_dir():
+        raise RegistryError(
+            f"archive {archive} did not extract to expected "
+            f"directory {expected_dirname!r} under {dest_parent}"
+        )
+    return extracted
+
+
+def _expected_files(extract_dir: Path) -> tuple[Path, Path]:
+    return extract_dir / "weights.h5", extract_dir / "arch.yaml"
+
+
+def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
+    """Return a :class:`ResolvedModel` for ``name``, downloading if needed."""
+    mf = load_manifest(name)
+
+    if _looks_like_placeholder(mf.weights_sha256):
         raise RegistryError(
             f"model {name!r} has no verified checksum yet "
-            f"(weights_sha256={entry.weights_sha256!r}). "
+            f"(weights_sha256={mf.weights_sha256!r}). "
             "The maintainer needs to publish the release."
         )
-    dest = cache_dir() / entry.filename
-    if dest.exists() and not force:
-        if _sha256_file(dest) == entry.weights_sha256:
-            return dest
-        print(
-            f"warning: cached {dest} does not match expected checksum; "
-            "redownloading.", file=sys.stderr,
+
+    extract_dir = cache_dir() / mf.extract_dirname
+    weights_path, arch_path = _expected_files(extract_dir)
+
+    already_ok = (
+        not force
+        and weights_path.exists()
+        and arch_path.exists()
+    )
+    if already_ok:
+        return ResolvedModel(
+            name=mf.name,
+            version=mf.version,
+            weights_path=weights_path,
+            arch_config_path=arch_path,
+            manifest=mf,
         )
-        dest.unlink()
-    print(f"Downloading {entry.name} v{entry.version} from {entry.weights_url}",
-          file=sys.stderr)
-    _download(entry.weights_url, dest)
-    got = _sha256_file(dest)
-    if got != entry.weights_sha256:
-        dest.unlink()
+
+    # (Re-)fetch: download the archive to a sibling temp filename, sha256
+    # verify, then extract in place. If anything fails part-way, clean up
+    # partial state so the next invocation retries cleanly.
+    archive_path = cache_dir() / mf.archive_filename
+    if force or not archive_path.exists() or _sha256_file(archive_path) != mf.weights_sha256:
+        if archive_path.exists():
+            archive_path.unlink()
+        print(f"Downloading {mf.name} v{mf.version} from {mf.weights_url}",
+              file=sys.stderr)
+        _download(mf.weights_url, archive_path)
+
+    got = _sha256_file(archive_path)
+    if got != mf.weights_sha256:
+        archive_path.unlink()
         raise RegistryError(
-            f"SHA256 mismatch for {name!r}: expected "
-            f"{entry.weights_sha256}, got {got}. File deleted."
+            f"SHA256 mismatch for {name!r} archive: expected "
+            f"{mf.weights_sha256}, got {got}. File deleted."
         )
-    return dest
 
+    # Remove any half-extracted state, then extract.
+    if extract_dir.exists():
+        import shutil
+        shutil.rmtree(extract_dir)
+    _safe_extract(archive_path, cache_dir(), mf.extract_dirname)
 
-def resolve_config(name: str) -> Path:
-    """Return the path to the bundled training config for ``name``."""
-    entry = get_entry(name)
-    candidates = [Path(__file__).parent / "_bundled" / "configs" / entry.config]
-    for root in _repo_root_candidates():
-        candidates.append(root / "configs" / entry.config)
-    for p in candidates:
-        if p.exists():
-            return p
-    raise RegistryError(
-        f"config {entry.config!r} for model {name!r} not found; "
-        f"looked in {[str(p) for p in candidates]}"
+    # Sanity check the extracted layout.
+    if not weights_path.exists() or not arch_path.exists():
+        raise RegistryError(
+            f"model {name!r} archive did not contain the expected "
+            f"weights.h5 and arch.yaml under {extract_dir}"
+        )
+
+    # Keep the archive around so `--force` can detect a matching download
+    # without re-hitting the URL. Users can `drusilla models rm NAME` to
+    # reclaim disk.
+    return ResolvedModel(
+        name=mf.name,
+        version=mf.version,
+        weights_path=weights_path,
+        arch_config_path=arch_path,
+        manifest=mf,
     )
 
 
-def clear(name: str) -> Path | None:
-    """Delete the cached weights file for ``name``. Returns the removed path or None."""
-    entry = get_entry(name)
-    dest = cache_dir() / entry.filename
-    if dest.exists():
-        dest.unlink()
-        return dest
-    return None
+def clear(name: str) -> list[Path]:
+    """Delete cached artifacts for ``name``. Returns removed paths."""
+    import shutil
+    mf = load_manifest(name)
+    removed: list[Path] = []
+    extract_dir = cache_dir() / mf.extract_dirname
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
+        removed.append(extract_dir)
+    archive_path = cache_dir() / mf.archive_filename
+    if archive_path.exists():
+        archive_path.unlink()
+        removed.append(archive_path)
+    return removed
 
 
 def local_status(name: str) -> dict[str, Any]:
-    """Return a small dict describing the local cache state of ``name``."""
-    entry = get_entry(name)
-    dest = cache_dir() / entry.filename
-    if not dest.exists():
-        return {"name": name, "version": entry.version, "cached": False, "path": None}
-    sha = _sha256_file(dest)
-    ok = (sha == entry.weights_sha256) if not _looks_like_placeholder(entry.weights_sha256) else None
+    """Describe the local cache state of ``name``."""
+    mf = load_manifest(name)
+    extract_dir = cache_dir() / mf.extract_dirname
+    weights_path, arch_path = _expected_files(extract_dir)
+    cached = weights_path.exists() and arch_path.exists()
     return {
         "name": name,
-        "version": entry.version,
-        "cached": True,
-        "path": str(dest),
-        "sha256_ok": ok,
+        "version": mf.version,
+        "cached": cached,
+        "extract_dir": str(extract_dir) if cached else None,
+        "weights_path": str(weights_path) if cached else None,
+        "arch_config_path": str(arch_path) if cached else None,
     }

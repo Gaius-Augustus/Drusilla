@@ -15,62 +15,68 @@ def add_args(p: argparse.ArgumentParser) -> None:
     p_dl = sub.add_parser("download", help="Download a model into the local cache.")
     p_dl.add_argument("name", help="Model name (see `drusilla models list`).")
     p_dl.add_argument("--force", action="store_true",
-                      help="Re-download even if the cached file is valid.")
+                      help="Re-download even if a cached copy is present.")
 
     p_rm = sub.add_parser("rm", help="Remove a cached model.")
     p_rm.add_argument("name")
 
-    p_pa = sub.add_parser("path", help="Print the local path to a cached model.")
+    p_pa = sub.add_parser("path",
+                          help="Print local paths (weights + arch config) for a cached model.")
     p_pa.add_argument("name")
     p_pa.add_argument("--download", action="store_true",
                       help="Download the model if it is not yet cached.")
 
 
 def _cmd_list(_args: argparse.Namespace) -> int:
-    entries = registry.load_registry()
-    if not entries:
+    manifests = registry.list_manifests()
+    if not manifests:
         print("no models registered.")
         return 0
-    for name in sorted(entries):
-        e = entries[name]
+    for name in sorted(manifests):
+        mf = manifests[name]
         st = registry.local_status(name)
         cache = "cached" if st["cached"] else "not cached"
-        clades = ",".join(e.clades) if e.clades else "-"
-        print(f"{name:20s} v{e.version:6s}  {cache:12s}  clades={clades}")
-        if e.description:
-            print(f"  {e.description}")
+        clade = mf.data.get("target_clade") or "-"
+        arch = mf.data.get("architecture") or "-"
+        print(f"{name:20s} v{mf.version:6s}  {cache:12s}  clade={clade}  arch={arch}")
+        if mf.data.get("comment"):
+            print(f"  {mf.data['comment']}")
     print()
     print(f"cache dir: {registry.cache_dir()}")
     return 0
 
 
 def _cmd_download(args: argparse.Namespace) -> int:
-    path = registry.resolve_weights(args.name, force=args.force)
-    print(str(path))
+    resolved = registry.resolve_model(args.name, force=args.force)
+    print(f"weights  : {resolved.weights_path}")
+    print(f"arch cfg : {resolved.arch_config_path}")
     return 0
 
 
 def _cmd_rm(args: argparse.Namespace) -> int:
     removed = registry.clear(args.name)
-    if removed is None:
+    if not removed:
         print(f"{args.name}: nothing to remove")
     else:
-        print(f"removed {removed}")
+        for p in removed:
+            print(f"removed {p}")
     return 0
 
 
 def _cmd_path(args: argparse.Namespace) -> int:
     if args.download:
-        path = registry.resolve_weights(args.name)
-    else:
-        st = registry.local_status(args.name)
-        if not st["cached"]:
-            raise SystemExit(
-                f"{args.name}: not cached. Run `drusilla models download {args.name}` "
-                f"or pass --download."
-            )
-        path = st["path"]
-    print(str(path))
+        resolved = registry.resolve_model(args.name)
+        print(f"weights  : {resolved.weights_path}")
+        print(f"arch cfg : {resolved.arch_config_path}")
+        return 0
+    st = registry.local_status(args.name)
+    if not st["cached"]:
+        raise SystemExit(
+            f"{args.name}: not cached. Run `drusilla models download {args.name}` "
+            f"or pass --download."
+        )
+    print(f"weights  : {st['weights_path']}")
+    print(f"arch cfg : {st['arch_config_path']}")
     return 0
 
 
