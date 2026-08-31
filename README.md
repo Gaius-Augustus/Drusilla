@@ -78,30 +78,6 @@ is set.
 
 See [docs/annotate.md](docs/annotate.md) for the full flag reference.
 
-### Subsequence-isoform collapse (on by default)
-
-Multi-isoform StringTie assemblies often produce isoforms whose
-predicted CDS is a sub-sequence of another isoform's. Drusilla collapses
-these automatically in every `drusilla annotate` run. Disable with:
-
-```bash
-drusilla annotate ... --no-subseq-collapse
-```
-
-The same collapse is exposed as a standalone command for post-processing
-prediction GTFs from other sources:
-
-```bash
-drusilla filter-subseq \
-  --orfs-gtf    orfs.gtf \
-  --out-gtf     orfs.filtered.gtf \
-  --report-tsv  orfs.dropped_subseq.tsv
-```
-
-See [docs/filter_subseq.md](docs/filter_subseq.md) for matching rules
-and tolerance flags.
-
----
 
 ## Models
 
