@@ -27,10 +27,10 @@ name: vertebrates
 version: "1.0"
 target_clade: "Vertebrata"
 ncbi_tax_id: 7742
-weights_url: "https://TODO.uni-greifswald.de/drusilla/models/vertebrates-v1.0.tar.gz"
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/drusilla/vertebrates.tar.gz"
 drusilla_version: "0.1.0"
 default_chunk_len: 9999
-date: "TODO"
+date: "31.08.26"
 architecture: "cnn_lstm"
-comment: "Vertebrate ORF finder (CNN + BiLSTM, 6-state HMM head)."
+comment: ""
 training_species: []
