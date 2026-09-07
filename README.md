@@ -34,8 +34,62 @@ External tools required on `PATH`:
 - `gffread` — always (extracts transcript sequences from the genome)
 - `stringtie` — only if you pass a BAM (StringTie is run internally)
 
-A Singularity image bundling all three will be released alongside this
-package.
+A Singularity image bundling all three is published on Docker Hub as
+[`larsgabriel23/drusilla`](https://hub.docker.com/r/larsgabriel23/drusilla).
+See [Container](#container) below.
+
+---
+
+## Container
+
+A prebuilt image is available at
+`docker://larsgabriel23/drusilla:latest`. It is based on the NVIDIA NGC
+TensorFlow image (`nvcr.io/nvidia/tensorflow:25.02-tf2-py3`) and bundles
+Drusilla, `gffread`, and `stringtie`.
+
+### Singularity / Apptainer
+
+Build a local `.sif` from the Docker Hub image:
+
+```bash
+singularity build drusilla.sif docker://larsgabriel23/drusilla:latest
+# or, with Apptainer:
+apptainer build drusilla.sif docker://larsgabriel23/drusilla:latest
+```
+
+Run it (bind-mount your working dir and a cache dir for model weights):
+
+```bash
+singularity run --nv \
+  -B $PWD:/work \
+  -B $HOME/.cache/drusilla:/data/drusilla_cache \
+  drusilla.sif annotate \
+    --stringtie-gtf /work/stringtie.gtf \
+    --genome        /work/genome.fa \
+    --model         vertebrates \
+    --out-dir       /work/results
+```
+
+`--nv` is required for GPU access. `DRUSILLA_CACHE_DIR` inside the image
+is set to `/data/drusilla_cache`, so the second bind mount lets
+downloaded model archives persist across runs.
+
+On clusters that block direct DockerHub pulls from compute nodes, build
+the `.sif` once on a login node (or a workstation) and copy it to the
+cluster.
+
+### Docker
+
+```bash
+docker run --rm --gpus all \
+  -v $PWD:/work \
+  -v $HOME/.cache/drusilla:/data/drusilla_cache \
+  larsgabriel23/drusilla:latest annotate \
+    --stringtie-gtf /work/stringtie.gtf \
+    --genome        /work/genome.fa \
+    --model         vertebrates \
+    --out-dir       /work/results
+```
 
 ---
 
