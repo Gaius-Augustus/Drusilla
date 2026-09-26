@@ -204,3 +204,10 @@ larger data-generation pipeline, described separately in
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Funding
+
+Funded by the Deutsche Forschungsgemeinschaft (DFG, German Research
+Foundation), project number 552910312: "AI-GUSTUS: Eine cloud-native Pipeline
+für genaue Genom-Annotation" (AI-GUSTUS: a cloud-native pipeline for accurate
+genome annotation).
