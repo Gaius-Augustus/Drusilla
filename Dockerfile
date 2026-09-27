@@ -18,6 +18,14 @@ RUN pip install --no-cache-dir \
         biopython \
         pandas
 
+# LightGBM filter of gene finder predictions (Paludamentum's Drusilla flow):
+# the model is a pickled lightgbm LGBMClassifier, which needs scikit-learn to
+# load; the ORF features read the genome with pyfaidx.
+RUN pip install --no-cache-dir \
+        lightgbm \
+        scikit-learn \
+        pyfaidx
+
 RUN cd /opt && \
         git clone https://github.com/Gaius-Augustus/Drusilla && \
         cd Drusilla && \
