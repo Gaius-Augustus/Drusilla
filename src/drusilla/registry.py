@@ -241,6 +241,26 @@ def _download(url: str, dest: Path) -> None:
         raise
 
 
+def _check_sha256(archive: Path, expected: str | None) -> None:
+    """Delete ``archive`` and raise if its sha256 is not ``expected``.
+
+    Manifests without ``weights_sha256`` are not checked.
+    """
+    if not expected:
+        return
+    import hashlib
+    h = hashlib.sha256()
+    with archive.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(_CHUNK), b""):
+            h.update(chunk)
+    if h.hexdigest() != str(expected).strip().lower():
+        archive.unlink()
+        raise RegistryError(
+            f"sha256 of {archive.name} is {h.hexdigest()}, the manifest "
+            f"expects {expected}"
+        )
+
+
 def _safe_extract(archive: Path, dest_parent: Path, expected_dirname: str) -> Path:
     """Extract ``archive`` under ``dest_parent`` and return the extracted directory.
 
@@ -378,6 +398,7 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
         print(f"Downloading {mf.name} v{mf.version} from {mf.weights_url}",
               file=sys.stderr)
         _download(mf.weights_url, archive_path)
+        _check_sha256(archive_path, mf.data.get("weights_sha256"))
 
     if extract_dir.exists():
         import shutil

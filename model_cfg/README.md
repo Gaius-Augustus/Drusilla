@@ -21,7 +21,9 @@ To publish a new model:
    tar -czf vertebrates-v1.0.tar.gz vertebrates-v1.0/
    ```
 2. Upload the tarball to a stable HTTPS location.
-3. Add / update a `<name>.yaml` here with the URL. Bump `version` to
+3. Add / update a `<name>.yaml` here with the URL, the archive's
+   `weights_sha256` (`sha256sum vertebrates-v1.0.tar.gz`; checked after
+   every download) and the `training_run`. Bump `version` to
    invalidate cached copies on client machines (the cache directory
    name includes the version).
 

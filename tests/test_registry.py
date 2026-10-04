@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import tarfile
 from pathlib import Path
 
@@ -244,6 +245,34 @@ def test_resolve_model_reextracts_on_version_bump(tmp_path: Path, monkeypatch):
     _write_manifest(cfg_dir, "fakemodel", "1.1", archive.as_uri())
     registry.resolve_model("fakemodel")   # version mismatch: re-download
     assert len(calls) == 2
+
+
+def test_resolve_model_checks_sha256(tmp_path: Path, monkeypatch):
+    workdir = tmp_path / "release"
+    workdir.mkdir()
+    archive = _make_fake_archive("fakemodel", workdir)
+    sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
+    manifest = cfg_dir / "fakemodel.yaml"
+    manifest.write_text(manifest.read_text() + f"weights_sha256: '{'0' * 64}'\n")
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+
+    with pytest.raises(registry.RegistryError, match="sha256"):
+        registry.resolve_model("fakemodel")
+    assert not (tmp_path / "cache" / "models" / "fakemodel.tar.gz").exists()
+
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
+    manifest.write_text(manifest.read_text() + f"weights_sha256: '{sha}'\n")
+    assert registry.resolve_model("fakemodel").weights_path.exists()
+
+
+def test_bundled_manifests_have_sha256():
+    for name, mf in registry.list_manifests().items():
+        assert len(str(mf.data.get("weights_sha256", ""))) == 64, name
 
 
 def test_resolve_model_corrupted_archive_cleans_up(tmp_path: Path, monkeypatch):

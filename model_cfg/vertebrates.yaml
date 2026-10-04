@@ -16,6 +16,8 @@
 #   target_clade        free-text clade label (informational)
 #   ncbi_tax_id         NCBI taxonomy id of the clade (informational)
 #   weights_url         HTTPS URL to the .tar.gz archive
+#   weights_sha256      sha256 of the archive; checked after the download
+#   training_run        training run the weights come from
 #   drusilla_version    minimum drusilla version this release was tested with
 #   default_chunk_len   chunk_len the weights were trained with (informational)
 #   date                YYYY-MM-DD release date
@@ -28,9 +30,12 @@ version: "1.0"
 target_clade: "Vertebrata"
 ncbi_tax_id: 7742
 weights_url: "https://bioinf.uni-greifswald.de/bioinf/drusilla/vertebrates.tar.gz"
+weights_sha256: "373b920ff4cc2b5bebbb1879ba9bc5d3e995b4eff60125efd49e5c46834cdc97"
+# best.weights.h5 (= epoch_300.weights.h5) of results/models/cnn_lstm_vertebrates_run009
+training_run: "cnn_lstm_vertebrates_run009"
 drusilla_version: "0.1.0"
 default_chunk_len: 9999
-date: "31.08.26"
+date: "2026-08-31"
 architecture: "cnn_lstm"
 comment: ""
 training_species:
