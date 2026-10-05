@@ -5,10 +5,7 @@ StringTie GTF (or a sorted RNA-seq BAM) plus the corresponding genome,
 Drusilla predicts the coding region of every assembled transcript and
 writes a genomic GTF of CDS lines.
 
-Under the hood: CNN + BiLSTM per-position classifier over
-`IR / START / E1 / E2 / E0 / STOP`, followed by a 6-state structured HMM
-that enforces ATG starts, in-frame stops, and a single canonical reading
-frame per ORF.
+[Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) runs Drusilla in a Nextflow pipeline that combines it with ab initio predictions from [Tiberius](https://github.com/Gaius-Augustus/Tiberius).
 
 > **Model availability.** Only the **vertebrate** model is released at
 > the moment (`--model vertebrates`, the default). Models for
