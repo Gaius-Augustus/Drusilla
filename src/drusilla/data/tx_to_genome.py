@@ -21,6 +21,10 @@ def project_tx_intervals_to_genomic(
     Returns one CDS GTF line per genomic sub-interval, sorted ascending
     by genomic start.
     """
+    if tx.strand not in ("+", "-"):
+        # A '.' would be projected as '-' and mirror the ORF in the exons;
+        # `drusilla annotate` splits unstranded transcripts before this.
+        raise ValueError(f"transcript {tx_id} has strand {tx.strand!r}, not '+' or '-'")
     gid = gene_id if gene_id is not None else tx_id
     out: list[str] = []
     for orf_tx_start, orf_tx_end in cds_intervals:

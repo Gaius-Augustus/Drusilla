@@ -46,7 +46,7 @@ Written under `--out-dir` in the default mode:
 | File | Description |
 |---|---|
 | `orfs.gtf`       | **PRIMARY.** Genomic-coordinate GTF, one `CDS` line per genomic sub-interval of every predicted ORF (1-based inclusive; `source = "drusilla"`; shared `transcript_id` / `gene_id` per ORF). Subsequence-isoform collapse is applied by default (see below). |
-| `orfs_local.gtf` | Same predictions in transcript (local) coordinates: one `CDS` line per predicted ORF, contig column holds the StringTie `transcript_id`, strand = `+`, phase = 0 at the ORF start. Always in sync with `orfs.gtf` (same set of kept transcripts). |
+| `orfs_local.gtf` | Same predictions in transcript (local) coordinates: one `CDS` line per predicted ORF, contig column holds the StringTie `transcript_id`, strand = `+`, phase = 0 at the ORF start. Always in sync with `orfs.gtf` (same set of kept transcripts). For an unstranded transcript kept as `-` (see below), the coordinates refer to its reverse complement. |
 | `orfs.log`       | b2m annotation log. |
 
 Extra outputs, only produced when their flag is set:
@@ -58,6 +58,19 @@ Extra outputs, only produced when their flag is set:
 | `<partial5-out.gtf>`      | `--partial5-out FILE` (5'-truncated ORFs) |
 | `stringtie.filtered.gtf`  | Any of `--min-cov / --min-tpm / --drop-unstranded / --drop-single-exon`. |
 | `stringtie.gtf`, `transcripts.fa` | Intermediates produced when starting from `--bam` or when gffread ran. Deleted unless `--keep-tmp` is set. |
+| `stringtie.stranded.gtf`  | Always: the StringTie GTF with every unstranded transcript in both orientations (see below). Deleted unless `--keep-tmp` is set. |
+
+### Unstranded transcripts
+
+StringTie gives strand `.` to transcripts without spliced reads, almost
+always single-exon ones. Such a transcript can be a gene on either strand,
+so it is annotated in both orientations: `stringtie.stranded.gtf` holds it
+as `+` under its own `transcript_id` and as `-` under `transcript_id` +
+`__drusilla_minus`. After prediction, one copy is kept under the original
+`transcript_id`: the one with the longer complete ORF, else the one with
+the longer partial ORF (at least `--min-coding-length`); a tie keeps `+`.
+Every output line has strand `+` or `-`. With `--drop-unstranded` these
+transcripts are removed before this step.
 
 ## Flags
 

@@ -355,6 +355,82 @@ def _filter_stringtie_gtf(
     return len(keep), len(lines_by_tid) - len(keep)
 
 
+# transcript_id suffix of the '-' copy of an unstranded transcript.
+_MINUS_SUFFIX = "__drusilla_minus"
+
+
+def _split_unstranded_gtf(in_path: Path, out_path: Path) -> dict[str, str]:
+    """Write a GTF in which every transcript with strand '.' is stranded.
+
+    StringTie gives strand '.' to transcripts without spliced reads, almost
+    always single-exon ones, which can be genes on either strand. Each such
+    transcript is written twice: as '+' under its own transcript_id and as
+    '-' under transcript_id + ``_MINUS_SUFFIX``, so both orientations are
+    extracted by gffread and annotated. Stranded transcripts are copied as
+    they are. Returns ``{transcript_id: transcript_id of the '-' copy}``.
+    """
+    import re
+    from collections import defaultdict
+
+    tid_re = re.compile(r'(transcript_id\s+")([^"]+)(")')
+    tx_strand: dict[str, str] = {}
+    lines_by_tid: dict[str, list[list[str]]] = defaultdict(list)
+    other_lines: list[str] = []
+
+    for raw in Path(in_path).read_text().splitlines():
+        if not raw or raw.startswith("#"):
+            other_lines.append(raw)
+            continue
+        f = raw.split("\t")
+        tid = _gtf_attr(f[8], "transcript_id") if len(f) >= 9 else None
+        if tid is None:
+            other_lines.append(raw)
+            continue
+        lines_by_tid[tid].append(f)
+        if f[2] == "transcript":
+            tx_strand[tid] = f[6]
+        else:
+            tx_strand.setdefault(tid, f[6])
+
+    minus_of: dict[str, str] = {}
+    for tid, strand in tx_strand.items():
+        if strand not in ("+", "-"):
+            minus = tid + _MINUS_SUFFIX
+            if minus in lines_by_tid:
+                raise SystemExit(f"transcript_id {minus} is already in {in_path}")
+            minus_of[tid] = minus
+
+    with Path(out_path).open("w") as fh:
+        for raw in other_lines:
+            fh.write(raw + "\n")
+        for tid, rows in lines_by_tid.items():
+            if tid not in minus_of:
+                for f in rows:
+                    fh.write("\t".join(f) + "\n")
+                continue
+            for strand, name in (("+", tid), ("-", minus_of[tid])):
+                for f in rows:
+                    attrs = tid_re.sub(lambda m: m.group(1) + name + m.group(3), f[8])
+                    fh.write("\t".join(f[:6] + [strand] + f[7:8] + [attrs]) + "\n")
+    return minus_of
+
+
+def _choose_orientations(
+    minus_of: dict[str, str],
+    score: Callable[[str], tuple[int, int]],
+) -> dict[str, str]:
+    """``{transcript_id: kept copy}`` for the split unstranded transcripts.
+
+    ``score(tid)`` is (longest complete ORF, longest partial ORF) in nt of a
+    copy. The '-' copy is kept only if its score is higher: a complete ORF
+    beats any partial one, and a tie keeps the '+' copy.
+    """
+    return {
+        tid: minus if score(minus) > score(tid) else tid
+        for tid, minus in minus_of.items()
+    }
+
+
 def _encode_b2m_to_model(nuc_int, chunk_len: int):
     """Convert a b2m chunked nucleotide array (N, T) to model input (N, chunk_len, 6)."""
     import numpy as np
@@ -546,6 +622,18 @@ def run(args: argparse.Namespace) -> int:
         )
         stringtie_gtf = filtered_gtf
 
+    # 1c. unstranded transcripts ('.') are annotated in both orientations;
+    # the better one is kept after prediction (step 6).
+    stranded_gtf = args.out_dir / "stringtie.stranded.gtf"
+    minus_of = _split_unstranded_gtf(stringtie_gtf, stranded_gtf)
+    orig_of = {minus: tid for tid, minus in minus_of.items()}
+    print(
+        f"Unstranded transcripts annotated in both orientations: "
+        f"{len(minus_of)} -> {stranded_gtf}",
+        flush=True,
+    )
+    stringtie_gtf = stranded_gtf
+
     # 2. extract transcripts FASTA via gffread
     if args.transcripts_fa is None:
         transcripts_fa = args.out_dir / "transcripts.fa"
@@ -712,8 +800,8 @@ def run(args: argparse.Namespace) -> int:
                 if lc is not None:
                     lorf_counts[lc] = lorf_counts.get(lc, 0) + 1
                 lines = project_tx_intervals_to_genomic(
-                    tid, cds_intervals, transcripts[tid], "drusilla",
-                    lorf_class=lc,
+                    orig_of.get(tid, tid), cds_intervals, transcripts[tid],
+                    "drusilla", lorf_class=lc,
                 )
                 per_tx_output[tid] = {
                     "coding_length": coding_length,
@@ -743,6 +831,53 @@ def run(args: argparse.Namespace) -> int:
         postprocess=postprocess,
         group_size_limit=1_000_000_000,
     )
+
+    def flat_labels(tid: str):
+        """Labels of transcript tid without padding and the 5' prefix."""
+        flat_lbl = label_store[tid].ravel()[:transcripts[tid].length + pad_k]
+        return flat_lbl[pad_k:] if pad_k > 0 else flat_lbl
+
+    # --- 6. Unstranded transcripts: keep one orientation. ---------------
+    # Both copies of a split transcript were annotated; the copy with the
+    # longer complete ORF (else the longer partial one) is kept under the
+    # original transcript_id, the other one is discarded.
+    if minus_of:
+        from dataclasses import replace
+        from ..data.gtf_writer import extract_partial_orfs, extract_5prime_partial_orfs
+
+        def score(tid: str) -> tuple[int, int]:
+            complete = per_tx_output.get(tid, {}).get("coding_length", 0)
+            partial = 0
+            if label_store and tid in label_store and tid in transcripts:
+                lbl = flat_labels(tid)
+                partial = max([e - s for s, e in extract_partial_orfs(lbl)]
+                              + [e - s for s, e in extract_5prime_partial_orfs(lbl)]
+                              + [0])
+                if partial < args.min_coding_length:
+                    partial = 0
+            return complete, partial
+
+        kept = _choose_orientations(minus_of, score)
+        stores = [per_tx_output, tx_seqs]
+        if label_store is not None:
+            stores.append(label_store)
+        n_minus = 0
+        for tid, minus in minus_of.items():
+            if kept[tid] == minus:
+                n_minus += 1
+                for d in stores:
+                    d.pop(tid, None)
+                    if minus in d:
+                        d[tid] = d.pop(minus)
+                transcripts[tid] = replace(transcripts.pop(minus), tid=tid)
+            else:
+                for d in stores + [transcripts]:
+                    d.pop(minus, None)
+        print(
+            f"Unstranded transcripts: {len(minus_of) - n_minus} kept as '+', "
+            f"{n_minus} as '-'",
+            flush=True,
+        )
 
     if args.single_isoform:
         best_per_gene: dict[str, tuple[int, str]] = {}
@@ -900,12 +1035,7 @@ def run(args: argparse.Namespace) -> int:
                 if tid not in transcripts:
                     continue
                 tx = transcripts[tid]
-                chunk_lbl = label_store[tid]
-                flat_lbl = chunk_lbl.ravel()
-                real_len = tx.length + pad_k
-                flat_lbl = flat_lbl[:real_len]
-                if pad_k > 0:
-                    flat_lbl = flat_lbl[pad_k:]
+                flat_lbl = flat_labels(tid)
                 for orf_start, orf_end in extract_partial_orfs(flat_lbl):
                     if args.min_coding_length > 0 and (orf_end - orf_start) < args.min_coding_length:
                         continue
@@ -937,12 +1067,7 @@ def run(args: argparse.Namespace) -> int:
                 if tid not in transcripts:
                     continue
                 tx = transcripts[tid]
-                chunk_lbl = label_store[tid]
-                flat_lbl = chunk_lbl.ravel()
-                real_len = tx.length + pad_k
-                flat_lbl = flat_lbl[:real_len]
-                if pad_k > 0:
-                    flat_lbl = flat_lbl[pad_k:]
+                flat_lbl = flat_labels(tid)
                 for orf_start, orf_end in extract_5prime_partial_orfs(flat_lbl):
                     if args.min_coding_length > 0 and (orf_end - orf_start) < args.min_coding_length:
                         continue
@@ -955,7 +1080,7 @@ def run(args: argparse.Namespace) -> int:
         print(f"5'-partial ORFs: {n_partial5} -> {args.partial5_out}", flush=True)
 
     if not args.keep_tmp:
-        for f in (intermediate_gtf, args.out_dir / "transcripts.fa",
+        for f in (intermediate_gtf, stranded_gtf, args.out_dir / "transcripts.fa",
                   args.out_dir / f"transcripts.pad{args.prefix_pad_n}.fa",
                   args.out_dir / f"transcripts.flank{args.flank_bp}.fa"):
             try:
