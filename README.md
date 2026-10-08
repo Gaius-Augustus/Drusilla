@@ -132,7 +132,7 @@ See [docs/annotate.md](docs/annotate.md) for the full flag reference.
 
 ## Models
 
-Only the **vertebrate** model is released today. Other clades are in
+Only the **vertebrate** and **insect** models are released today. Other clades are in
 training; this table will grow as they land in [`models.yaml`](models.yaml).
 
 | Name (`--model`)   | Clade / target      | Status         | Architecture       | Notes |
@@ -140,7 +140,7 @@ training; this table will grow as they land in [`models.yaml`](models.yaml).
 | `vertebrates`      | Vertebrata          | **Released**   | CNN + BiLSTM (6-state HMM head) | Default. Trained on 51 vertebrate species; validated on 4 held-out species. |
 | `embryophyta`      | Land plants         | In training    | —                  | Planned. |
 | `fungi`            | Fungi               | In training    | —                  | Planned. |
-| `insecta`          | Insects             | Planned        | —                  | — |
+| `insecta`          | Insects             | **Preliminary model**        | —                  | — |
 
 Applying a released model to species from another clade is technically
 possible but the predictions are not benchmarked and will underperform.

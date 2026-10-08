@@ -6,7 +6,7 @@
 #
 # Archive layout (after tar -xzf):
 #   <name>-v<version>/
-#     weights.h5   — Keras .weights.h5 file
+#     model.weights.h5   — Keras .weights.h5 file
 #     arch.yaml    — architecture / data config (used by build_model_from_config)
 #
 # Field reference:

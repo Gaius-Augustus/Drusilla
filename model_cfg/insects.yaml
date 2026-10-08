@@ -1,0 +1,141 @@
+# Drusilla model manifest — vertebrates.
+#
+# One YAML per released model. Follows the Tiberius model_cfg convention:
+# the file describes the release (URL, checksum, provenance) and the
+# archive at `weights_url` bundles the actual model artifacts.
+#
+# Archive layout (after tar -xzf):
+#   <name>-v<version>/
+#     model.weights.h5   — Keras .weights.h5 file
+#     arch.yaml    — architecture / data config (used by build_model_from_config)
+#
+# Field reference:
+#   name                identifier (must match the filename stem)
+#   version             string; the cache dir includes it, so bumping
+#                       version invalidates cached copies on all clients
+#   target_clade        free-text clade label (informational)
+#   ncbi_tax_id         NCBI taxonomy id of the clade (informational)
+#   weights_url         HTTPS URL to the .tar.gz archive
+#   weights_sha256      sha256 of the archive; checked after the download
+#   training_run        training run the weights come from
+#   drusilla_version    minimum drusilla version this release was tested with
+#   default_chunk_len   chunk_len the weights were trained with (informational)
+#   date                YYYY-MM-DD release date
+#   architecture        informational; the real arch is inside arch.yaml
+#   comment             free text
+#   training_species    list of species (informational)
+
+name: insects
+version: "1.0"
+target_clade: "Insects"
+ncbi_tax_id: 50557
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/drusilla/insects.tar.gz"
+weights_sha256: "373b920ff4cc2b5bebbb1879ba9bc5d3e995b4eff60125efd49e5c46834cdc97"
+training_run: "cnn_lstm_run006_insects"
+drusilla_version: "0.1.0"
+default_chunk_len: 9999
+date: "2026-10-08"
+architecture: "cnn_lstm"
+comment: ""
+training_species: [
+    Ennomos_fuscantarius
+    Sipha_flava
+    Drosophila_navojoa
+    Cardiocondyla_obscurior
+    Lasiommata_megera
+    Schlechtendalia_chinensis
+    Drosophila_birchii
+    Agrotis_ipsilon
+    Anastrepha_ludens
+    Bactrocera_oleae
+    Drosophila_grimshawi
+    Zeugodacus_cucurbitae
+    Metopolophium_dirhodum
+    Formica_exsecta
+    Megalopta_genalis
+    Aporophyla_lueneburgensis
+    Harpegnathos_saltator
+    Ostrinia_furnacalis
+    Drosophila_obscura
+    Culex_quinquefasciatus
+    Apis_mellifera
+    Sitophilus_oryzae
+    Bactrocera_dorsalis
+    Oryctes_rhinoceros
+    Trichoplusia_ni
+    Bactrocera_minax
+    Musca_domestica
+    Rhopalosiphum_padi
+    Polypedilum_vanderplanki
+    Thrips_palmi
+    Cochliomyia_hominivorax
+    Hormaphis_cornu
+    Episyrphus_balteatus
+    Calliphora_vicina
+    Arctia_plantaginis
+    Nicrophorus_vespilloides
+    Mythimna_separata
+    Chilo_suppressalis
+    Thymelicus_sylvestris
+    Frankliniella_occidentalis
+    Rhogogaster_chlorosoma
+    Schizaphis_graminum
+    Rhynchophorus_ferrugineus
+    Plodia_interpunctella
+    Ceratitis_capitata
+    Melitaea_cinxia
+    Cryptotermes_secundus
+    Amphipyra_tragopoginis
+    Operophtera_brumata
+    Onthophagus_taurus
+    Bradysia_coprophila
+    Nezara_viridula
+    Temnothorax_longispinosus
+    Cimex_lectularius
+    Propsilocerus_akamusi
+    Ips_nitidus
+    Melanaphis_sacchari
+    Pediculus_humanus
+    Anopheles_farauti
+    Chrysoperla_carnea
+    Laodelphax_striatellus
+    Glossina_palpalis
+    Monomorium_pharaonis
+    Diuraphis_noxia
+    Phlebotomus_papatasi
+    Drosophila_suzukii
+    Aphis_glycines
+    Sogatella_furcifera
+    Sitobion_avenae
+    Gryllus_bimaculatus
+    Andrena_minutula
+    Anopheles_arabiensis
+    Drosophila_innubila
+    Bactrocera_tryoni
+    Nasonia_vitripennis
+    Solenopsis_invicta
+    Galleria_mellonella
+    Camponotus_floridanus
+    Bombus_impatiens
+    Pogonomyrmex_californicus
+    Dendroctonus_ponderosae
+    Helicoverpa_zea
+    Periplaneta_americana
+    Hycleus_cichorii
+    Leptopilina_boulardi
+    Anopheles_stephensi
+    Halyomorpha_halys
+    Hermetia_illucens
+    Ooceraea_biroi
+    Spodoptera_litura
+    Bemisia_tabaci
+    Lymantria_dispar
+    Anabrus_simplex
+    Aedes_aegypti
+    Stomoxys_calcitrans
+    Dermacentor_andersoni
+    Bicyclus_anynana
+    Armigeres_subalbatus
+    Malaya_genurostris
+    ]
+
