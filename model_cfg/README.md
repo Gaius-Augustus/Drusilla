@@ -16,7 +16,7 @@ To publish a new model:
 1. Build the archive:
    ```bash
    mkdir vertebrates-v1.0
-   cp path/to/best.weights.h5 vertebrates-v1.0/mdoel.weights.h5
+   cp path/to/best.weights.h5 vertebrates-v1.0/model.weights.h5
    cp path/to/arch.yaml       vertebrates-v1.0/arch.yaml
    tar -czf vertebrates-v1.0.tar.gz vertebrates-v1.0/
    ```
