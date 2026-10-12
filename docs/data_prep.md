@@ -1,18 +1,7 @@
 # Preparing TFRecords for training
 
 Drusilla's `train` command consumes TFRecord shards produced from
-labelled transcripts. There are two paths:
-
-1. **Per-species manual build** (this document). Fine for one species or
-   a handful; requires you to bring RNA-seq alignments and a curated
-   reference annotation.
-2. **Full multi-species data-gen pipeline.** Nextflow-driven; runs
-   NCBI-`datasets` genome download, VARUS RNA-seq alignment, StringTie
-   assembly, gffcompare labelling, and TFRecord chunking across a species
-   list. Lives in the [tiberius_orf_finder](https://github.com/Gaius-Augustus/tiberius_orf_finder)
-   sister repo (`nextflow/main_shortread_v2.nf` and friends).
-
-The per-species path is documented here.
+labelled transcripts.
 
 ## Inputs per species
 
