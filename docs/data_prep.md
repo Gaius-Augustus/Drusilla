@@ -7,8 +7,7 @@ labelled transcripts.
 
 - A genome FASTA (e.g. `GRCh38.fa`).
 - A StringTie GTF of assembled transcripts.
-- A reference annotation (GFF3 / GTF) with `CDS` and `stop_codon`
-  features (RefSeq / BRAKER / Ensembl all work).
+- A reference annotation (GFF3 / GTF).
 - A transcript FASTA produced by `gffread -w`.
 
 If you're starting from an RNA-seq BAM, generate the StringTie GTF and
@@ -22,7 +21,7 @@ gffread -w transcripts.fa -g GRCh38.fa stringtie.gtf
 ## Step 1 — label transcripts
 
 For every StringTie transcript, project the reference CDS onto the
-transcript and emit a per-position int8 label array
+transcript and emit a per-position label array
 (0=IR, 1=START, 2=E1, 3=E2, 4=E0, 5=STOP).
 
 ```bash
@@ -54,7 +53,7 @@ python scripts/build_tfrecords.py \
   --fasta   labels/<species>/transcripts_labelled.fa \
   --labels  labels/<species>/labels.npz \
   --out     tfrecords/<species>.tfrecords \
-  --chunk-len 9999
+  --chunk-len 999
 ```
 
 TFRecord schema per example:
