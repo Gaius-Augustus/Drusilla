@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# environments / editors
+.venv/
+venv/
+.env
+.idea/
+.vscode/
+.DS_Store
+
+# Drusilla run artefacts and model cache
+drusilla_out/
+*.sif
+.cache/
