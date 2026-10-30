@@ -40,6 +40,7 @@ def test_run_id():
     assert m.run_id("SRR31344714.1219032", pat) == "SRR31344714"
     assert m.run_id("ERR123.5/1", pat) == "ERR123"
     assert m.run_id("read_without_run", pat) == "_unmatched"
+    assert m.run_id("read_without_run", None) == "all"   # --run-regex none
 
 
 def test_write_report(tmp_path):

@@ -30,7 +30,8 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                          "reads written/tagged/dropped.")
     ap.add_argument("--run-regex", default=sfb.DEFAULT_RUN_REGEX,
                     help="Regex whose group 1 is the run id in the read name "
-                         "(default: leading letters+digits, e.g. SRR123456).")
+                         "(default: leading letters+digits, e.g. SRR123456); "
+                         "'none': the whole BAM is one run (a single library).")
     ap.add_argument("--min-spliced", type=int, default=sfb.DEFAULT_MIN_SPLICED,
                     help=f"Spliced reads needed to call a run (default {sfb.DEFAULT_MIN_SPLICED}).")
     ap.add_argument("--stranded-threshold", type=float, default=sfb.DEFAULT_THRESHOLD,

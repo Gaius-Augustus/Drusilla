@@ -57,7 +57,7 @@ The same step runs inside `drusilla annotate` with `--bam ... --fix-strand`
 | `--in-bam FILE`              | required | Input BAM (any order; read once per pass). |
 | `--out-bam FILE`             | required | Output BAM with `XS:A` set on all mapped reads of stranded runs. |
 | `--report-tsv FILE`          | required | Per-run report (see below). |
-| `--run-regex RE`             | leading letters+digits | Regex whose group 1 is the run id in the read name. |
+| `--run-regex RE`             | leading letters+digits | Regex whose group 1 is the run id in the read name. `none`: the whole BAM is one run (a BAM of a single library). |
 | `--min-spliced N`            | 2000 | Spliced reads with `XS` needed to call a run; fewer gives `unknown`. |
 | `--stranded-threshold F`     | 0.9  | Agreement fraction for a stranded call; runs between `1-F` and `F` are `unstranded`. |
 | `--max-pass1-reads N`        | all  | Stop pass 1 after N records (speed). |

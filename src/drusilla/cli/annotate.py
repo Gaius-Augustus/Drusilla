@@ -156,7 +156,7 @@ def add_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--strand-run-regex", default=None,
                     help="With --fix-strand: regex whose group 1 is the run "
                          "id in a read name (default: leading letters+digits, "
-                         "e.g. SRR123456).")
+                         "e.g. SRR123456); 'none': the BAM is one library.")
     ap.add_argument("--keep-tmp", action="store_true",
                     help="Do not delete intermediate FASTA / BAM files and "
                          "b2m's own GTF in --out-dir.")

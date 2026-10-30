@@ -15,7 +15,8 @@ antisense neighbours separate. Reads of unstranded runs are left untouched
 (or dropped with ``drop_unstranded=True``).
 
 Run ids are taken from the read name (``SRR123.456`` -> ``SRR123`` with the
-default regex); pass another ``run_regex`` for other naming schemes.
+default regex); pass another ``run_regex`` for other naming schemes, or
+``"none"`` to treat the whole BAM as one run (a BAM of a single library).
 
 CLI: ``drusilla strand-fix-bam``; also ``drusilla annotate --bam ... --fix-strand``.
 Requires ``pysam`` (``pip install "drusilla[bam]"``).
@@ -71,7 +72,10 @@ def transcript_strand(r1_forward: bool, call: str) -> str | None:
     return None
 
 
-def run_id(qname: str, pattern: re.Pattern) -> str:
+def run_id(qname: str, pattern: re.Pattern | None) -> str:
+    """Run id of a read; ``pattern=None`` puts every read into the one run ``all``."""
+    if pattern is None:
+        return "all"
     m = pattern.match(qname)
     return m.group(1) if m else "_unmatched"
 
@@ -170,6 +174,9 @@ def fix_strand(
 ) -> dict[str, int]:
     """Two-pass strand recovery. Returns summary counts.
 
+    ``run_regex``: regex whose group 1 is the run id in a read name; ``""`` or
+    ``"none"`` makes the whole BAM one run.
+
     Keys: ``runs``, ``stranded_runs``, ``unstranded_runs``, ``unknown_runs``,
     ``reads``, ``tagged``, ``dropped``.
     """
@@ -180,7 +187,7 @@ def fix_strand(
             "strand fixing needs pysam: pip install pysam  (or drusilla[bam])"
         ) from e
 
-    pattern = re.compile(run_regex)
+    pattern = None if run_regex in ("", "none") else re.compile(run_regex)
     print(f"[strand-fix] pass 1: spliced-read orientation vs XS in {in_bam}", flush=True)
     counts = pass1_counts(str(in_bam), pattern, max_pass1_reads, threads)
     calls = {rid: classify_run(n, a, min_spliced, threshold)
