@@ -48,3 +48,42 @@ def test_models_list_runs(capsys, tmp_path, monkeypatch):
 def test_missing_required_args_fails():
     with pytest.raises(SystemExit):
         main(["annotate"])
+
+
+def test_strand_fix_help():
+    with pytest.raises(SystemExit) as exc:
+        main(["strand-fix-bam", "--help"])
+    assert exc.value.code == 0
+
+
+def test_annotate_transcript_handling_flags_parse():
+    ap = _build_parser()
+    ns = ap.parse_args([
+        "annotate", "--stringtie-gtf", "st.gtf", "--genome", "g.fa", "--out-dir", "o",
+        "--unstranded-both-strands", "--unstranded-pick", "both",
+        "--flank-bp", "500", "--flank-3p-bp", "300", "--flank-keep",
+        "--flank-min-tx-frac", "0.6", "--orfs-per-tx", "0",
+    ])
+    assert ns.unstranded_both_strands is True and ns.unstranded_pick == "both"
+    assert (ns.flank_bp, ns.flank_3p_bp, ns.flank_keep) == (500, 300, True)
+    assert ns.flank_min_tx_frac == 0.6 and ns.orfs_per_tx == 0
+    # defaults: one ORF per transcript, longest orientation, no flanks
+    ns = ap.parse_args(["annotate", "--stringtie-gtf", "st.gtf", "--genome", "g.fa",
+                        "--out-dir", "o"])
+    assert ns.orfs_per_tx == 1 and ns.unstranded_pick == "longest"
+    assert ns.flank_3p_bp == 0 and ns.flank_keep is False and ns.fix_strand is False
+
+
+def test_annotate_option_consistency():
+    from drusilla.cli.annotate import _check_option_consistency
+
+    ap = _build_parser()
+    base = ["annotate", "--stringtie-gtf", "st.gtf", "--genome", "g.fa", "--out-dir", "o"]
+    _check_option_consistency(ap.parse_args(base + ["--flank-bp", "100", "--flank-keep"]))
+    for bad in (["--flank-keep"],
+                ["--flank-bp", "100", "--flank-keep", "--flank-clip"],
+                ["--prefix-pad-n", "50", "--flank-3p-bp", "100"],
+                ["--fix-strand"],
+                ["--orfs-per-tx", "-1"]):
+        with pytest.raises(SystemExit):
+            _check_option_consistency(ap.parse_args(base + bad))

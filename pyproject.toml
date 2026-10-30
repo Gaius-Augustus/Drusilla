@@ -33,7 +33,9 @@ gpu = [
   "hidten",
   "biopython",
   "pandas",
+  "pysam",
 ]
+bam = ["pysam"]
 test = ["pytest"]
 
 [project.scripts]

@@ -46,8 +46,15 @@ Written under `--out-dir` in the default mode:
 | File | Description |
 |---|---|
 | `orfs.gtf`       | **PRIMARY.** Genomic-coordinate GTF, one `CDS` line per genomic sub-interval of every predicted ORF (1-based inclusive; `source = "drusilla"`; shared `transcript_id` / `gene_id` per ORF). Subsequence-isoform collapse is applied by default (see below). |
-| `orfs_local.gtf` | Same predictions in transcript (local) coordinates: one `CDS` line per predicted ORF, contig column holds the StringTie `transcript_id`, strand = `+`, phase = 0 at the ORF start. Always in sync with `orfs.gtf` (same set of kept transcripts). |
+| `orfs_local.gtf` | Same predictions in transcript (local) coordinates: one `CDS` line per predicted ORF, contig column holds the sequence record (`<tid>`, or `<tid>__rc` for the reverse-complement copy of an unstranded transcript), strand = `+`, phase of the first written base (non-zero only for ORFs completed into the 5' flank, whose flank part is clipped). The part of a completed ORF that lies in a genomic flank is clipped here; the `completion` attribute marks such ORFs. Always in sync with `orfs.gtf` (same set of kept ORFs). |
 | `orfs.log`       | b2m annotation log. |
+| `stringtie.gtf`  | Written when starting from `--bam`. Kept. |
+| `strand_runs.tsv` | Per-run strandedness report, written with `--fix-strand` (see [strand_fix.md](strand_fix.md)). Kept. |
+
+ORFs that were completed into a genomic flank (`--flank-keep`) carry the
+GTF attribute `completion "5p"`, `"3p"` or `"5p3p"`. Additional ORFs on
+the same transcript (`--orfs-per-tx`) get ids `<tid>.orf2`, `<tid>.orf3`,
+... and their own `gene_id`.
 
 Extra outputs, only produced when their flag is set:
 
@@ -57,7 +64,7 @@ Extra outputs, only produced when their flag is set:
 | `<partial-out.gtf>`       | `--partial-out FILE`  (3'-truncated ORFs) |
 | `<partial5-out.gtf>`      | `--partial5-out FILE` (5'-truncated ORFs) |
 | `stringtie.filtered.gtf`  | Any of `--min-cov / --min-tpm / --drop-unstranded / --drop-single-exon`. |
-| `stringtie.gtf`, `transcripts.fa` | Intermediates produced when starting from `--bam` or when gffread ran. Deleted unless `--keep-tmp` is set. |
+| `transcripts.fa`, `transcripts.bothstrands.fa`, padded FASTAs (`transcripts.pad*.fa`, `transcripts.flank*.fa`), `orfs.b2m_local.gtf` (b2m's own GTF), `aligned.strandfix.bam` | Intermediates. Deleted unless `--keep-tmp` is set. |
 
 ## Flags
 
@@ -72,17 +79,35 @@ Extra outputs, only produced when their flag is set:
 | `--ir-prior FLOAT`       | 0.5 | Under `--restrict-start-to-ir-start`, `P(start in IR)`. |
 | `--threads N`            | 4   | Threads for stringtie / gffread. |
 | `--longread`             | off | Pass `-L` to StringTie (PacBio Iso-Seq / ONT). |
-| `--keep-tmp`             | off | Do not delete intermediate GTF / FASTA files. |
+| `--keep-tmp`             | off | Do not delete intermediate FASTA / BAM files and b2m's GTF. |
+| `--fix-strand`           | off | With `--bam`: recover per-run library strandedness first and run StringTie on the fixed BAM. Needs `pysam`. Writes `strand_runs.tsv`. See [strand_fix.md](strand_fix.md). |
+| `--strand-run-regex RE`  | leading letters+digits | With `--fix-strand`: regex whose group 1 is the run id in a read name (e.g. `SRR123456`). |
 
-### 5' context padding
+### Genomic flanks and ORF completion
 
-Adds fake upstream context so the model has a left window at position 0.
+Adds context around each transcript so the model has a left window at
+position 0 and, optionally, so ORFs cut off by an incomplete assembly
+can be completed from the genome.
 
-| Flag | Meaning |
-|---|---|
-| `--prefix-pad-n K`       | Prepend K literal Ns per transcript. |
-| `--flank-bp K`           | Prepend K bp of real genomic context (RC for `-` strand); short chromosome edges are N-padded. Mutually exclusive with `--prefix-pad-n`. |
-| `--flank-clip`           | With `--flank-bp`, clip ORFs whose START falls in the flank to the next in-frame codon inside the transcript. Without this, such ORFs are dropped. |
+| Flag | Default | Meaning |
+|---|---|---|
+| `--prefix-pad-n K`       | 0 | Prepend K literal Ns per transcript. ORFs starting inside the pad are dropped. Excludes `--flank-bp` and `--flank-3p-bp`. |
+| `--flank-bp K`           | 0 | Prepend K bp of real upstream genomic context (RC for `-` strand); short chromosome edges are N-padded. Mutually exclusive with `--prefix-pad-n`. |
+| `--flank-3p-bp K`        | 0 | Append K bp of real downstream genomic context. Only useful with `--flank-keep`: an ORF whose STOP falls in the 3' flank is then emitted as a completed CDS. |
+| `--flank-clip`           | off | With `--flank-bp`, clip ORFs whose START falls in the flank to the next in-frame codon inside the transcript. Without this (and without `--flank-keep`), such ORFs are dropped. Mutually exclusive with `--flank-keep`. |
+| `--flank-keep`           | off | With `--flank-bp` and/or `--flank-3p-bp`, keep ORFs that extend into a flank and project the flank part to the genome (ORF completion). Completed ORFs carry the attribute `completion "5p\|3p\|5p3p"`. |
+| `--flank-min-tx-frac F`  | 0.5 | With `--flank-keep`: minimum fraction of an ORF's coding bases that must lie inside the assembled transcript; ORFs below it are dropped. Must be between 0 and 1. |
+
+### Unstranded transcripts and several ORFs per transcript
+
+StringTie transcripts with strand `.` are modelled on the forward strand,
+because gffread extracts them as the forward genomic sequence.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--unstranded-both-strands` | off | Also scan the reverse complement of every strand-`.` transcript as a separate record `<tid>__rc` with a `-` strand model. Without it, minus-strand genes on unstranded (mostly single-exon) transcripts cannot be called. |
+| `--unstranded-pick {longest,both}` | `longest` | With `--unstranded-both-strands`: emit only the orientation with the longest ORF, or both. |
+| `--orfs-per-tx N`           | 1   | Maximum ORFs emitted per transcript, longest first. Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... and their own `gene_id`. 0 = no limit. Useful for fused transcripts carrying several genes. |
 
 ### Reference-free StringTie pre-filters
 
@@ -104,8 +129,8 @@ Typical short-read defaults: `--min-cov 3 --min-tpm 1 --drop-unstranded`.
 |---|---|---|
 | `--min-coding-length N`  | 200 | Drop ORFs whose total CDS length is below N nt. Set to 0 to disable. |
 | `--single-isoform`       | off | Keep at most one transcript per StringTie `gene_id` — the one with the longest predicted CDS (ties broken by `transcript_id`). |
-| `--min-utr-5 N`          | 0   | Drop ORFs whose START is within N nt of the transcript 5' end (proxy for 5' assembly truncation). |
-| `--min-utr-3 N`          | 0   | Drop ORFs whose STOP is within N nt of the transcript 3' end. |
+| `--min-utr-5 N`          | 0   | Drop ORFs whose START is within N nt of the transcript 5' end (proxy for 5' assembly truncation). Not applied to an end that was completed into a flank. |
+| `--min-utr-3 N`          | 0   | Drop ORFs whose STOP is within N nt of the transcript 3' end. Not applied to an end that was completed into a flank. |
 
 ### Optional partial-ORF output
 
@@ -119,7 +144,7 @@ Typical short-read defaults: `--min-cov 3 --min-tpm 1 --drop-unstranded`.
 
 Drops predicted isoforms whose spliced CDS is a (near-)sub-sequence of
 another isoform in the same StringTie locus (locus = `transcript_id`
-minus the trailing `.<iso>`). Applied automatically to both `orfs.gtf`
+minus the `.orfN` / `__rc` suffixes and the trailing `.<iso>`). Applied automatically to both `orfs.gtf`
 and `orfs_local.gtf` so the two files always agree. The same collapse
 is also available as a standalone command — see
 [filter_subseq.md](filter_subseq.md).
@@ -152,6 +177,20 @@ drusilla annotate \
   --longread \
   --min-cov 3 --min-tpm 1 --drop-unstranded --drop-single-exon \
   --single-isoform \
+  --out-dir       drusilla_out/
+```
+
+Pooled SRA BAM, recover strandedness, scan both strands of unstranded
+transcripts and complete truncated ORFs from the genome:
+
+```bash
+drusilla annotate \
+  --bam           aligned.sorted.bam \
+  --genome        genome.fa \
+  --fix-strand \
+  --unstranded-both-strands \
+  --flank-bp 300 --flank-3p-bp 300 --flank-keep \
+  --orfs-per-tx 2 \
   --out-dir       drusilla_out/
 ```
 

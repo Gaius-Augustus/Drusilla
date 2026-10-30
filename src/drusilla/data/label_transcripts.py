@@ -21,6 +21,14 @@ For each StringTie transcript the module decides one of:
 
 No StringTie transcript is dropped: every transcript becomes a training example.
 
+Strand '.' transcripts: ``parse_stringtie_gtf`` normalises strand '.' to '+'
+(gffread extracts such transcripts as the forward genomic sequence) and sets
+``StringTieTranscript.unstranded = True``. Such transcripts are therefore
+matched against '+' reference CDS: one containing a '+' reference CDS is
+labelled ``kept_single`` / ``kept_multi`` (or ``kept_partial``) instead of
+``antisense_ir``. Only '-' reference CDS overlap yields ``antisense_ir`` for
+them. TFRecords built with this code differ for unstranded transcripts.
+
 Labels per transcript position (int8):
     0 IR   1 START   2 E1   3 E2   4 E0   5 STOP
 where ``START`` marks the A of ATG and ``STOP`` marks the last base of the stop
@@ -44,10 +52,20 @@ _FRAME_CYCLE = (E1, E2, E0)
 
 @dataclass
 class StringTieTranscript:
+    """Assembled transcript: id, contig, strand, genomic exons.
+
+    ``strand`` is always '+' or '-'; an assembler strand '.' is stored as '+'
+    with ``unstranded=True``.
+    """
     tid: str
     contig: str
     strand: str
     exons: list[tuple[int, int]]
+    # True when the assembler left the strand undetermined ('.'). gffread
+    # extracts such transcripts as the forward genomic sequence, so the
+    # model is normalised to '+' and the flag records the ambiguity; the
+    # reverse complement is a separate '-' copy (see tx_augment).
+    unstranded: bool = False
 
     @property
     def length(self) -> int:
@@ -108,7 +126,13 @@ def _parse_attr(attr_col: str, key: str) -> str | None:
 
 
 def parse_stringtie_gtf(path: Path) -> dict[str, StringTieTranscript]:
-    """Parse a StringTie GTF, collecting exon features per transcript."""
+    """Parse a StringTie GTF, collecting exon features per transcript.
+
+    Strand '.' (or any value other than '+'/'-') is normalised to '+' and
+    flagged with ``unstranded=True``, matching gffread's forward-strand
+    extraction. Downstream, ``project_labels`` therefore treats these
+    transcripts as '+' transcripts.
+    """
     exons: dict[str, list[tuple[int, int]]] = defaultdict(list)
     meta: dict[str, tuple[str, str]] = {}
     for line in Path(path).read_text().splitlines():
@@ -128,9 +152,10 @@ def parse_stringtie_gtf(path: Path) -> dict[str, StringTieTranscript]:
     out: dict[str, StringTieTranscript] = {}
     for tid, es in exons.items():
         contig, strand = meta[tid]
+        unstranded = strand not in ("+", "-")
         out[tid] = StringTieTranscript(
-            tid=tid, contig=contig, strand=strand,
-            exons=sorted(es),
+            tid=tid, contig=contig, strand="+" if unstranded else strand,
+            exons=sorted(es), unstranded=unstranded,
         )
     return out
 

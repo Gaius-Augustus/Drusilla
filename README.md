@@ -31,6 +31,10 @@ External tools required on `PATH`:
 - `gffread` — always (extracts transcript sequences from the genome)
 - `stringtie` — only if you pass a BAM (StringTie is run internally)
 
+Optional Python dependency: `pysam`, needed only for `--fix-strand` and
+`drusilla strand-fix-bam` (`pip install "drusilla[bam]"`; already part of
+`[gpu]` and of the container).
+
 A Singularity image bundling all three is published on Docker Hub as
 [`larsgabriel23/drusilla`](https://hub.docker.com/r/larsgabriel23/drusilla).
 See [Container](#container) below.
@@ -115,6 +119,13 @@ drusilla annotate \
 For PacBio Iso-Seq / ONT spliced BAMs add `--longread` (passes `-L` to
 StringTie).
 
+If the BAM pools several sequencing runs that were aligned without a
+strandedness option (e.g. VARUS / HISAT2 defaults), add `--fix-strand`
+(requires `--bam`). It infers each run's protocol and sets the `XS` tag
+on all reads of stranded runs before StringTie runs, so single-exon
+transcripts get a strand. Details in
+[docs/strand_fix.md](docs/strand_fix.md).
+
 Output (in `--out-dir`) by default:
 
 - `orfs.gtf` — **primary**, genomic-coordinate CDS lines
@@ -123,12 +134,44 @@ Output (in `--out-dir`) by default:
   `gene_id` per ORF), subsequence-isoform collapse applied.
 - `orfs_local.gtf` — same predictions in transcript coordinates.
 - `orfs.log` — b2m annotation log.
+- `stringtie.gtf` — kept when starting from a BAM.
+- `strand_runs.tsv` — per-run strandedness report, with `--fix-strand`.
 
-Intermediate StringTie / gffread output is deleted unless `--keep-tmp`
-is set.
+Intermediate FASTA / BAM files (and b2m's own GTF) are deleted unless
+`--keep-tmp` is set.
 
 See [docs/annotate.md](docs/annotate.md) for the full flag reference.
 
+
+## Unstranded, truncated and fused transcripts
+
+StringTie leaves single-exon transcripts of unstranded libraries without a
+strand (`.`). Drusilla models these on the forward strand, as `gffread`
+extracts them. Three optional mechanisms recover genes that such
+assemblies otherwise miss; they are clade-independent and off by default
+(see [docs/annotate.md](docs/annotate.md) for details and
+[docs/strand_fix.md](docs/strand_fix.md) for the BAM-level alternative):
+
+| Flag | Effect |
+|---|---|
+| `--unstranded-both-strands` | Also scan the reverse complement of every `.` transcript (record `<tid>__rc`) and keep the orientation with the longest ORF (`--unstranded-pick both` keeps both). Needed for minus-strand genes on unstranded single-exon transcripts. |
+| `--flank-bp K --flank-3p-bp K --flank-keep` | Add `K` bp of genomic context on both sides of each transcript and keep ORFs whose start or stop falls in that flank ("ORF completion" of 5'/3'-truncated assemblies). Completed ORFs carry the GTF attribute `completion` (`5p`, `3p` or `5p3p`); `--flank-min-tx-frac` (default 0.5) limits how much of an ORF may lie outside the transcript. |
+| `--orfs-per-tx N` | Emit up to `N` ORFs per transcript, longest first (`0` = all; default 1). Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... Needed for fused transcripts that carry several genes. |
+| `--fix-strand` (with `--bam`) | Recover per-run library strandedness in a pooled BAM before StringTie, so fewer `.` transcripts are assembled in the first place. |
+
+Example for a compact genome assembled from pooled, partly unstranded
+RNA-seq:
+
+```bash
+drusilla annotate \
+  --bam           pooled.sorted.bam --fix-strand \
+  --genome        genome.fa \
+  --model         vertebrates \
+  --unstranded-both-strands \
+  --flank-bp 500 --flank-3p-bp 500 --flank-keep \
+  --orfs-per-tx 0 \
+  --out-dir       results/
+```
 
 ## Models
 

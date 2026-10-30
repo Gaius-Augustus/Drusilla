@@ -194,3 +194,13 @@ def test_run_filter_negative_tolerance_rejected(tmp_path: Path):
     with pytest.raises(ValueError):
         run_filter(gtf, tmp_path / "out.gtf",
                    terminal_overhang_nt=-1)
+
+
+def test_gene_id_from_tx_strips_orf_suffixes():
+    from drusilla.postprocess.subseq_filter import gene_id_from_tx
+
+    assert gene_id_from_tx("STRG.12.3") == "STRG.12"
+    assert gene_id_from_tx("STRG.12.3.orf2") == "STRG.12"
+    assert gene_id_from_tx("STRG.12.3__rc") == "STRG.12"
+    assert gene_id_from_tx("STRG.12.3__rc.orf3") == "STRG.12"
+    assert gene_id_from_tx("noiso") == "noiso"

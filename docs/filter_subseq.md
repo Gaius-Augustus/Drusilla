@@ -3,10 +3,14 @@
 Drop predicted isoforms whose spliced CDS is a (near-)sub-sequence of
 another isoform in the same locus. Runs on any prediction GTF with
 StringTie-style `transcript_id`s (`STRG.<gene>.<iso>`); the locus is
-derived by stripping the trailing `.<iso>`.
+derived by first stripping the Drusilla ORF-id suffixes (`.orfN` for
+additional ORFs on a transcript, `__rc` for the reverse-complement copy
+of an unstranded transcript) and then the trailing `.<iso>`. ORFs from
+the same transcript or from its two orientations therefore fall into
+the same locus.
 
-Also available as an inline post-step in `drusilla annotate` via
-`--subseq-collapse` (see [annotate.md](annotate.md)).
+Also applied by default as an inline post-step in `drusilla annotate`
+(disable with `--no-subseq-collapse`; see [annotate.md](annotate.md)).
 
 ## Definition
 

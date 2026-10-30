@@ -18,6 +18,10 @@ stringtie sample.sorted.bam -o stringtie.gtf -p 8
 gffread -w transcripts.fa -g GRCh38.fa stringtie.gtf
 ```
 
+For BAMs that pool runs aligned without a strandedness option, run
+`drusilla strand-fix-bam` before StringTie (see
+[strand_fix.md](strand_fix.md)).
+
 ## Step 1 — label transcripts
 
 For every StringTie transcript, project the reference CDS onto the
@@ -40,7 +44,8 @@ Outputs in `--out-dir`:
   the module always emits at least an all-IR array).
 - `stats.tsv`                — count of each label category
   (`kept_single`, `kept_multi`, `kept_partial`, `ir_only`,
-  `antisense_ir`, `ref_partial_ir`).
+  `antisense_ir`, `ref_partial_ir`). Strand `.` transcripts are counted
+  as `+` (see Notes).
 - `partial.tsv`              — details for the `kept_partial` cases.
 
 ## Step 2 — chunk into TFRecords
@@ -100,5 +105,12 @@ own clade, follow steps 1-3 above per species and combine the manifests.
   "..."` and `Parent=...`).
 - Antisense-only overlaps are labelled all-IR on purpose — the model
   should learn to reject them.
+- StringTie transcripts with strand `.` are treated as `+` (gffread
+  extracts them as the forward genomic sequence). A `+` reference CDS
+  inside such a transcript is labelled `kept_single` / `kept_multi` /
+  `kept_partial` instead of `antisense_ir`; only `-` reference CDS
+  overlap gives `antisense_ir` for them. TFRecords regenerated with this
+  code therefore differ for unstranded transcripts, and models trained
+  on earlier TFRecords were trained on the old labels.
 - Every StringTie transcript becomes a training example; there is no
   dropping in `label_transcripts.py`.

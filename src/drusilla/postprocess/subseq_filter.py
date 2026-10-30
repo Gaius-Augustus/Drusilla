@@ -42,6 +42,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from ..data.tx_augment import base_tid
+
 
 _GENE_ID_FROM_TX = re.compile(r"^(.*)\.\d+$")
 
@@ -58,6 +60,14 @@ def _parse_attr(attr_col: str, key: str) -> str | None:
 
 
 def gene_id_from_tx(tid: str) -> str:
+    """StringTie locus of a prediction id.
+
+    Strips the Drusilla ORF-id suffixes first (``<tid>.orf2`` for a second
+    ORF on the same transcript, ``<tid>__rc`` for the reverse-complement
+    copy of an unstranded transcript; see ``drusilla.data.tx_augment``),
+    then the trailing ``.<isoform>`` of the StringTie transcript id.
+    """
+    tid = base_tid(tid)
     m = _GENE_ID_FROM_TX.match(tid)
     return m.group(1) if m else tid
 
