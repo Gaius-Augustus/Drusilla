@@ -241,3 +241,30 @@ def test_resolve_n_pad_is_dropped_before_anything_else():
     assert resolve_orf([(3, 12)], tx, fi_n, keep=True) == "dropped_in_npad"
     assert resolve_orf([(5, 12)], tx, fi_n).outcome == "unchanged"
 
+def test_select_nonoverlapping_keeps_longest_per_genomic_locus():
+    from drusilla.data.tx_augment import select_nonoverlapping
+
+    # Two calls at one locus (forward 300 nt vs reverse 450 nt), a separate
+    # gene elsewhere, and a short ORF touching the long one: the longer
+    # orientation wins, the separate gene stays, the overlapping short one goes.
+    cands = [
+        (300, [(100, 400)]),            # 0 forward call, locus A
+        (450, [(90, 540)]),             # 1 reverse call, locus A (longer)
+        (240, [(1000, 1240)]),          # 2 separate gene, locus B
+        (90, [(530, 620)]),             # 3 overlaps 1 by 10 bases
+        (60, [(620, 680)]),             # 4 adjacent to 3, no overlap with kept
+    ]
+    assert select_nonoverlapping(cands) == [1, 2, 4]
+    assert select_nonoverlapping([]) == []
+    # Ties keep the earlier candidate.
+    assert select_nonoverlapping([(99, [(0, 99)]), (99, [(50, 149)])]) == [0]
+
+def test_genomic_segments_minus_strand_spliced():
+    from drusilla.data.tx_to_genome import genomic_segments
+
+    # '-' strand, exons g [0,20) and [30,50): transcript coord 0 is g=49.
+    # Transcript interval [15, 25) covers g 25..34 in reading order, i.e.
+    # g [30,35) from exon 2 and g [15,20) from exon 1.
+    tx = StringTieTranscript("t", "chr1", "-", [(0, 20), (30, 50)])
+    assert genomic_segments([(15, 25)], tx) == [(15, 20), (30, 35)]
+    assert genomic_segments([(5, 5)], tx) == []

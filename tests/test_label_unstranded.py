@@ -1,4 +1,5 @@
-"""Strand '.' StringTie transcripts are modelled and labelled on the forward strand."""
+"""Strand '.' StringTie transcripts are labelled in both orientations (label policy v2):
+the forward record as gffread extracts it, plus a reverse-complement record ``<tid>__rc``."""
 
 from __future__ import annotations
 
@@ -24,6 +25,8 @@ def test_unstranded_transcript_is_labelled_as_forward(tmp_path):
     ref = tmp_path / "ref.gtf"
     _write(ref, ['chr1\tRef\tCDS\t4\t12\t.\t+\t0\ttranscript_id "R.1";'])
     res = project_labels(st, ref)
-    assert res.stats == {"kept_single": 1}
+    assert res.stats == {"kept_single": 1, "antisense_ir": 1, "rc_copies": 1}
     lab = res.labels["ST.1"]
     assert lab[3] == START and lab[11] == STOP and (lab[:3] == IR).all()
+    # the reverse-complement record only sees the gene antisense
+    assert (res.labels["ST.1__rc"] == IR).all()

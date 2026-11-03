@@ -24,7 +24,7 @@ Exactly one path chooses the model:
 
 | Flag | Meaning |
 |---|---|
-| _(default)_             | Uses `--model vertebrates`. |
+| _(default)_             | Uses the default registered model (`DEFAULT_MODEL` in `drusilla/cli/annotate.py`): `vertebrates` today, `joint` once the joint model is released. |
 | `--model NAME`          | Registered model (see `drusilla models list`). On first use, downloads the `.tar.gz` archive, verifies its SHA256, and extracts to the cache. Both weights and architecture config come from the archive — no `--config` needed. |
 | `--weights FILE`        | Local `.weights.h5`. Requires `--config FILE` alongside it (the architecture is not carried inside `.weights.h5`). |
 
@@ -32,11 +32,24 @@ If you pass `--config` together with `--model`, the local config
 overrides the arch config that ships in the model archive. Only useful
 when you know exactly what you're doing.
 
+**Inference presets from the manifest.** A registered model's manifest
+may carry an `annotate_defaults` block for the options
+`unstranded_both_strands`, `unstranded_pick`, `orfs_per_tx`, `flank_bp`,
+`flank_3p_bp` and `flank_keep`. They fill in whatever you did not set on
+the command line; explicit flags always win (the boolean options have
+`--no-...` forms for that). The applied presets are printed as
+`[model] inference defaults taken from the model manifest: ...`. The
+`joint` manifest presets both-strand scanning with `nonoverlap`,
+`orfs_per_tx 0` and 500 bp flanks with completion, matching its training
+labels (label policy v2); `vertebrates` and `insects` set nothing. With
+`--weights` no manifest is involved and the built-in defaults apply.
+
 > **Currently available: `vertebrates` (default) and a preliminary
-> `insects` model.** Other clade models (embryophyta, fungi, …) are in
-> training. See the [Models table in the README](../README.md#models)
-> for status. To use Drusilla on a species outside these clades today,
-> either train a model with `drusilla train` (see
+> `insects` model.** The `joint` model for vertebrates, insects, land
+> plants, fungi, diatoms and green algae is in training and will become
+> the default. See the [Models table in the README](../README.md#models)
+> for status. To use Drusilla on a species outside the released clades
+> today, either train a model with `drusilla train` (see
 > [training.md](training.md)) or supply your own weights via
 > `--weights` / `--config`.
 
@@ -93,10 +106,10 @@ can be completed from the genome.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--prefix-pad-n K`       | 0 | Prepend K literal Ns per transcript. ORFs starting inside the pad are dropped. Excludes `--flank-bp` and `--flank-3p-bp`. |
-| `--flank-bp K`           | 0 | Prepend K bp of real upstream genomic context (RC for `-` strand); short chromosome edges are N-padded. Mutually exclusive with `--prefix-pad-n`. |
-| `--flank-3p-bp K`        | 0 | Append K bp of real downstream genomic context. Only useful with `--flank-keep`: an ORF whose STOP falls in the 3' flank is then emitted as a completed CDS. |
+| `--flank-bp K`           | 0 (manifest may preset) | Prepend K bp of real upstream genomic context (RC for `-` strand); short chromosome edges are N-padded. Mutually exclusive with `--prefix-pad-n`. |
+| `--flank-3p-bp K`        | 0 (manifest may preset) | Append K bp of real downstream genomic context. Only useful with `--flank-keep`: an ORF whose STOP falls in the 3' flank is then emitted as a completed CDS. |
 | `--flank-clip`           | off | With `--flank-bp`, clip ORFs whose START falls in the flank to the next in-frame codon inside the transcript. Without this (and without `--flank-keep`), such ORFs are dropped. Mutually exclusive with `--flank-keep`. |
-| `--flank-keep`           | off | With `--flank-bp` and/or `--flank-3p-bp`, keep ORFs that extend into a flank and project the flank part to the genome (ORF completion). Completed ORFs carry the attribute `completion "5p\|3p\|5p3p"`. |
+| `--flank-keep` / `--no-flank-keep` | off (manifest may preset) | With `--flank-bp` and/or `--flank-3p-bp`, keep ORFs that extend into a flank and project the flank part to the genome (ORF completion). Completed ORFs carry the attribute `completion "5p\|3p\|5p3p"`. |
 | `--flank-min-tx-frac F`  | 0.5 | With `--flank-keep`: minimum fraction of an ORF's coding bases that must lie inside the assembled transcript; ORFs below it are dropped. Must be between 0 and 1. |
 
 ### Unstranded transcripts and several ORFs per transcript
@@ -106,9 +119,9 @@ because gffread extracts them as the forward genomic sequence.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--unstranded-both-strands` | off | Also scan the reverse complement of every strand-`.` transcript as a separate record `<tid>__rc` with a `-` strand model. Without it, minus-strand genes on unstranded (mostly single-exon) transcripts cannot be called. |
-| `--unstranded-pick {longest,both}` | `longest` | With `--unstranded-both-strands`: emit only the orientation with the longest ORF, or both. |
-| `--orfs-per-tx N`           | 1   | Maximum ORFs emitted per transcript, longest first. Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... and their own `gene_id`. 0 = no limit. Useful for fused transcripts carrying several genes. |
+| `--unstranded-both-strands` / `--no-unstranded-both-strands` | off (manifest may preset; `joint`: on) | Also scan the reverse complement of every strand-`.` transcript as a separate record `<tid>__rc` with a `-` strand model. Without it, minus-strand genes on unstranded (mostly single-exon) transcripts cannot be called. |
+| `--unstranded-pick {nonoverlap,longest,both}` | `longest` (manifest may preset; `joint`: `nonoverlap`) | With `--unstranded-both-strands`: `nonoverlap` pools the ORFs of both orientations, keeps them longest first and drops every ORF that shares genomic bases with a kept one (a gene called in both orientations keeps the longer call, genes on different strands of one transcript survive); `longest` keeps only the orientation with the longest ORF; `both` keeps everything. `nonoverlap` is the rule matching label policy v2, under which the joint model was trained. |
+| `--orfs-per-tx N`           | 1 (manifest may preset; `joint`: 0) | Maximum ORFs emitted per transcript, longest first. Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... and their own `gene_id`. 0 = no limit. Needed for fused transcripts carrying several genes; the joint model's labels contain every gene of a fused transcript. |
 
 ### Reference-free StringTie pre-filters
 
@@ -182,16 +195,29 @@ drusilla annotate \
 ```
 
 Pooled SRA BAM, recover strandedness, scan both strands of unstranded
-transcripts and complete truncated ORFs from the genome:
+transcripts and complete truncated ORFs from the genome (with
+`--model joint` the last three lines are the manifest presets and can be
+dropped):
 
 ```bash
 drusilla annotate \
   --bam           aligned.sorted.bam \
   --genome        genome.fa \
   --fix-strand \
-  --unstranded-both-strands \
-  --flank-bp 300 --flank-3p-bp 300 --flank-keep \
-  --orfs-per-tx 2 \
+  --unstranded-both-strands --unstranded-pick nonoverlap \
+  --flank-bp 500 --flank-3p-bp 500 --flank-keep \
+  --orfs-per-tx 0 \
+  --out-dir       drusilla_out/
+```
+
+Joint model, but one ORF per transcript and no flanks (overriding its
+manifest presets):
+
+```bash
+drusilla annotate \
+  --stringtie-gtf stringtie.gtf \
+  --genome        genome.fa \
+  --model joint --orfs-per-tx 1 --flank-bp 0 --flank-3p-bp 0 --no-flank-keep \
   --out-dir       drusilla_out/
 ```
 

@@ -68,8 +68,10 @@ def add_args(ap: argparse.ArgumentParser) -> None:
     mdl = ap.add_mutually_exclusive_group()
     mdl.add_argument("--model", type=str, default=None,
                      help="Registered model name (see `drusilla models list`). "
-                          "Defaults to 'vertebrates' if neither --model nor "
-                          "--weights is given.")
+                          f"Defaults to {DEFAULT_MODEL!r} if neither --model nor "
+                          "--weights is given. A model manifest may preset the "
+                          "unstranded / flank / orfs-per-tx options "
+                          "(annotate_defaults); options given explicitly win.")
     mdl.add_argument("--weights", type=Path, default=None,
                      help="Path to a local .weights.h5 file (advanced use).")
     ap.add_argument("--config", type=Path, default=None,
@@ -97,13 +99,13 @@ def add_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--prefix-pad-n", type=int, default=0,
                     help="Prepend this many literal 'N' bases as left-context. "
                          "ORFs starting inside the pad are dropped.")
-    ap.add_argument("--flank-bp", type=int, default=0,
+    ap.add_argument("--flank-bp", type=int, default=None,
                     help="Prepend this many bp of real upstream genomic "
                          "context (RC for '-' strand), N-filled at contig "
                          "edges. Mutually exclusive with --prefix-pad-n. "
                          "By default ORFs whose START falls in the flank "
                          "are dropped (see --flank-clip / --flank-keep).")
-    ap.add_argument("--flank-3p-bp", type=int, default=0,
+    ap.add_argument("--flank-3p-bp", type=int, default=None,
                     help="Append this many bp of real downstream genomic "
                          "context (RC for '-' strand), N-filled at contig "
                          "edges. Only useful with --flank-keep: an ORF whose "
@@ -114,7 +116,7 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                          "flank to the first in-frame codon inside the tx "
                          "(emits a 5'-truncated CDS). Mutually exclusive "
                          "with --flank-keep.")
-    ap.add_argument("--flank-keep", action="store_true",
+    ap.add_argument("--flank-keep", action=argparse.BooleanOptionalAction, default=None,
                     help="With --flank-bp/--flank-3p-bp: keep ORFs that "
                          "extend into the genomic flank(s) and project the "
                          "flank part to the genome ('ORF completion' for "
@@ -128,23 +130,34 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                          "transcript (default 0.5).")
 
     # Unstranded transcripts / several ORFs per transcript.
-    ap.add_argument("--unstranded-both-strands", action="store_true",
+    # The three options below and the flank options default to None so that a
+    # model manifest can preset them (annotate_defaults); see
+    # _apply_inference_defaults for the built-in fallbacks.
+    ap.add_argument("--unstranded-both-strands",
+                    action=argparse.BooleanOptionalAction, default=None,
                     help="For transcripts whose assembler strand is '.' "
                          "(gffread extracts the forward genomic sequence) "
                          "also scan the reverse complement as a separate "
                          "record '<tid>__rc' with a '-' strand model. "
                          "Without this, minus-strand genes on unstranded "
-                         "(mostly single-exon) transcripts cannot be called.")
-    ap.add_argument("--unstranded-pick", choices=("longest", "both"),
-                    default="longest",
-                    help="With --unstranded-both-strands: emit only the "
-                         "orientation with the longest ORF (default) or "
-                         "both orientations.")
-    ap.add_argument("--orfs-per-tx", type=int, default=1,
+                         "(mostly single-exon) transcripts cannot be called. "
+                         "Built-in default off; the joint model's manifest "
+                         "turns it on (--no-unstranded-both-strands to override).")
+    ap.add_argument("--unstranded-pick", choices=("nonoverlap", "longest", "both"),
+                    default=None,
+                    help="With --unstranded-both-strands: 'nonoverlap' keeps "
+                         "the ORFs of both orientations, longest first, "
+                         "dropping any ORF that overlaps a kept one on the "
+                         "genome (matches label policy v2 of the joint model); "
+                         "'longest' keeps only the orientation with the "
+                         "longest ORF (built-in default); 'both' keeps "
+                         "everything.")
+    ap.add_argument("--orfs-per-tx", type=int, default=None,
                     help="Maximum number of ORFs emitted per transcript, "
-                         "longest first (default 1; 0 = no limit). Extra "
-                         "ORFs get transcript_id '<tid>.orf2', '<tid>.orf3', "
-                         "... Needed for fused transcripts.")
+                         "longest first (built-in default 1; 0 = no limit, the "
+                         "joint model's manifest default, as its training "
+                         "labels hold every gene of a fused transcript). Extra "
+                         "ORFs get transcript_id '<tid>.orf2', '<tid>.orf3', ...")
 
     ap.add_argument("--threads", type=int, default=4,
                     help="Threads for StringTie and for BAM (de)compression "
@@ -437,6 +450,73 @@ def _make_predict_func(
     return predict_func
 
 
+# Model used when neither --model nor --weights is given. Switch to the joint
+# multi-clade model ("joint") when its manifest model_cfg/joint.yaml is
+# released; the per-clade models stay available by name.
+DEFAULT_MODEL = "vertebrates"
+
+# Inference options a model manifest may preset in its ``annotate_defaults``
+# block (keys = argparse dests). Precedence: command line > manifest > these
+# built-ins, which reproduce the behaviour of Drusilla <= 0.2.
+INFERENCE_DEFAULTS: dict[str, object] = {
+    "unstranded_both_strands": False,
+    "unstranded_pick": "longest",
+    "orfs_per_tx": 1,
+    "flank_bp": 0,
+    "flank_3p_bp": 0,
+    "flank_keep": False,
+}
+_UNSTRANDED_PICKS = ("nonoverlap", "longest", "both")
+
+
+def _manifest_inference_defaults(args: argparse.Namespace) -> dict[str, object]:
+    """``annotate_defaults`` of the registered model that will be used, read
+    from its manifest without downloading anything. Empty for ``--weights``
+    runs and for unknown models (``_resolve_model_paths`` reports those)."""
+    if args.weights is not None:
+        return {}
+    from .. import registry
+    try:
+        data = registry.load_manifest(args.model or DEFAULT_MODEL).data
+    except registry.RegistryError:
+        return {}
+    block = data.get("annotate_defaults") or {}
+    if not isinstance(block, dict):
+        raise SystemExit(f"model manifest {data.get('name')!r}: annotate_defaults must be a mapping")
+    unknown = sorted(set(block) - set(INFERENCE_DEFAULTS))
+    if unknown:
+        raise SystemExit(f"model manifest {data.get('name')!r}: unknown annotate_defaults {unknown}; "
+                         f"allowed: {sorted(INFERENCE_DEFAULTS)}")
+    return dict(block)
+
+
+def _apply_inference_defaults(args: argparse.Namespace,
+                              manifest_defaults: dict[str, object] | None = None) -> list[str]:
+    """Fill the options left unset on the command line (None) from the
+    manifest block, then from ``INFERENCE_DEFAULTS``. Idempotent. Returns the
+    option names that came from the manifest."""
+    from_manifest: list[str] = []
+    for key, builtin in INFERENCE_DEFAULTS.items():
+        if getattr(args, key, None) is not None:
+            continue
+        if manifest_defaults and key in manifest_defaults:
+            value = manifest_defaults[key]
+            if isinstance(builtin, bool):
+                if not isinstance(value, bool):
+                    raise SystemExit(f"annotate_defaults.{key} must be true/false, got {value!r}")
+            elif isinstance(builtin, int):
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise SystemExit(f"annotate_defaults.{key} must be an integer >= 0, got {value!r}")
+            elif key == "unstranded_pick" and value not in _UNSTRANDED_PICKS:
+                raise SystemExit(f"annotate_defaults.unstranded_pick must be one of "
+                                 f"{_UNSTRANDED_PICKS}, got {value!r}")
+            setattr(args, key, value)
+            from_manifest.append(key)
+        else:
+            setattr(args, key, builtin)
+    return from_manifest
+
+
 def _resolve_model_paths(args: argparse.Namespace) -> tuple[Path, Path]:
     """Resolve (weights, arch_config) from --weights/--model/--config.
 
@@ -458,7 +538,7 @@ def _resolve_model_paths(args: argparse.Namespace) -> tuple[Path, Path]:
             )
         return args.weights, args.config
 
-    name = args.model or "vertebrates"
+    name = args.model or DEFAULT_MODEL
     resolved = registry.resolve_model(name)
     # --config is not needed for a registered model (arch.yaml ships in the
     # archive). Warn if user passed both, use the local one.
@@ -480,6 +560,9 @@ def _resolve_model_paths(args: argparse.Namespace) -> tuple[Path, Path]:
 
 
 def _check_option_consistency(args: argparse.Namespace) -> None:
+    # Options a manifest may preset are None until resolved; fall back to the
+    # built-ins here so the checks also work on a freshly parsed namespace.
+    _apply_inference_defaults(args)
     if args.prefix_pad_n > 0 and (args.flank_bp > 0 or args.flank_3p_bp > 0):
         raise SystemExit("--prefix-pad-n and --flank-bp/--flank-3p-bp are mutually exclusive")
     if args.flank_clip and args.flank_bp == 0:
@@ -506,10 +589,14 @@ def run(args: argparse.Namespace) -> int:
 
     from ..data import tx_augment as txa
     from ..data.label_transcripts import parse_stringtie_gtf
-    from ..data.tx_to_genome import project_tx_intervals_to_genomic
+    from ..data.tx_to_genome import genomic_segments, project_tx_intervals_to_genomic
 
+    from_manifest = _apply_inference_defaults(args, _manifest_inference_defaults(args))
     _check_option_consistency(args)
     weights_path, config_path = _resolve_model_paths(args)
+    if from_manifest:
+        print("[model] inference defaults taken from the model manifest: "
+              + ", ".join(f"{k}={getattr(args, k)}" for k in from_manifest), flush=True)
 
     with open(config_path) as fh:
         cfg = yaml.safe_load(fh)
@@ -827,8 +914,39 @@ def run(args: argparse.Namespace) -> int:
     )
     tmp_files.append(b2m_gtf)
 
-    # 7a. unstranded transcripts: keep the orientation with the longest ORF
-    # unless both were requested.
+    # 7a. unstranded transcripts, --unstranded-pick nonoverlap: pool the ORFs
+    # of both orientations and keep them longest first, dropping any ORF that
+    # shares genomic bases with a kept one (a gene called in both orientations
+    # keeps the longer call; genes on different strands of one transcript
+    # survive). This is the inference rule matching label policy v2, whose
+    # training labels hold both orientations of every unstranded transcript.
+    if rc_base_tids and args.unstranded_pick == "nonoverlap":
+        n_fwd = n_rc = n_dropped = 0
+        for b in rc_base_tids:
+            fwd = per_tx_orfs.get(b, [])
+            rc = per_tx_orfs.get(b + txa.RC_SUFFIX, [])
+            if not fwd and not rc:
+                continue
+            pool = [(o, b) for o in fwd] + [(o, b + txa.RC_SUFFIX) for o in rc]
+            keep = txa.select_nonoverlapping(
+                [(o["coding_length"], genomic_segments(o["intervals"], o["model"]))
+                 for o, _ in pool],
+            )
+            n_dropped += len(pool) - len(keep)
+            for tid in (b, b + txa.RC_SUFFIX):
+                kept = [pool[i][0] for i in keep if pool[i][1] == tid]
+                if kept:
+                    per_tx_orfs[tid] = kept
+                else:
+                    per_tx_orfs.pop(tid, None)
+            n_fwd += sum(pool[i][1] == b for i in keep)
+            n_rc += len(keep) - sum(pool[i][1] == b for i in keep)
+        print(f"unstranded transcripts: ORFs kept forward {n_fwd}, "
+              f"reverse-complement {n_rc}; dropped as genomic overlaps "
+              f"{n_dropped}", flush=True)
+
+    # --unstranded-pick longest: keep the orientation with the longest ORF
+    # ('both' keeps everything).
     if rc_base_tids and args.unstranded_pick == "longest":
         n_fwd = n_rc = 0
         for b in rc_base_tids:

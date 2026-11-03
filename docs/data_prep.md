@@ -36,17 +36,43 @@ python scripts/label_transcripts.py \
   --out-dir         labels/<species>/
 ```
 
+### Label policy v2
+
+This is the policy the joint model was trained with (Drusilla >= 0.3;
+the per-clade models were trained with the earlier policy, see Notes):
+
+- **Unstranded transcripts in both orientations.** A StringTie transcript
+  with strand `.` is labelled twice: the forward record (the sequence as
+  `gffread` extracts it, matched against `+` reference CDS) and a
+  reverse-complement record `<tid>__rc` (matched against `-` reference
+  CDS). Both records go into `labels.npz` and `transcripts_labelled.fa`.
+  At inference, `--unstranded-both-strands` with `--unstranded-pick
+  nonoverlap` is the matching rule. `--single-orientation` restores the
+  forward-only labelling.
+- **Every gene of a fused transcript.** All complete reference CDS fully
+  contained in the transcript are clustered by overlap on the transcript;
+  the longest CDS of every cluster is labelled (`kept_fused` when more
+  than one cluster, `kept_multi` when one cluster held several
+  isoforms). A further gene truncated by the transcript end is labelled
+  as far as it is visible (`extra_partial`). At inference,
+  `--orfs-per-tx 0` is the matching rule.
+- **Incomplete reference CDS stay unlabelled.** RefSeq CDS flagged
+  `partial=true` or `pseudo=true` are treated as incomplete even when
+  their length is a multiple of 3, so no START is placed on an
+  unverified base.
+
 Outputs in `--out-dir`:
 
-- `labels.npz`               — `{transcript_id: int8[L]}` array set
-- `transcripts_labelled.fa`  — subset of the input FASTA containing only
-  the transcripts that were labelled (i.e. every StringTie transcript;
-  the module always emits at least an all-IR array).
-- `stats.tsv`                — count of each label category
-  (`kept_single`, `kept_multi`, `kept_partial`, `ir_only`,
-  `antisense_ir`, `ref_partial_ir`). Strand `.` transcripts are counted
-  as `+` (see Notes).
-- `partial.tsv`              — details for the `kept_partial` cases.
+- `labels.npz`               — `{record_id: int8[L]}` array set, including
+  the `<tid>__rc` records
+- `transcripts_labelled.fa`  — the labelled records, i.e. every StringTie
+  transcript plus the reverse-complement sequence of every unstranded
+  one (the module always emits at least an all-IR array per record)
+- `stats.tsv`                — count per label category: `kept_single`,
+  `kept_multi`, `kept_fused`, `kept_partial`, `extra_partial`, `ir_only`,
+  `antisense_ir`, `ref_partial_ir`, `rc_copies`
+- `partial.tsv`              — details for the partially projected
+  reference CDS (`kept_partial`, `extra_partial`)
 
 ## Step 2 — chunk into TFRecords
 
@@ -57,9 +83,14 @@ window per transcript:
 python scripts/build_tfrecords.py \
   --fasta   labels/<species>/transcripts_labelled.fa \
   --labels  labels/<species>/labels.npz \
-  --out     tfrecords/<species>.tfrecords \
+  --out     tfrecords/<species>.tfrecords.gz \
   --chunk-len 9999
 ```
+
+An output name ending in `.gz` is written GZIP-compressed
+(`--compression {auto,none,gzip}` overrides the suffix rule). The one-hot
+payload shrinks about 45x; the 425 shards of the joint model take 21.5 GB
+instead of about 1 TB, and the loader reads both kinds transparently.
 
 TFRecord schema per example:
 
@@ -67,8 +98,8 @@ TFRecord schema per example:
 |--------------|---------|-------------|-------|
 | `input`      | bytes   | uint8 [L, 6]| A, C, G, T, N, PAD |
 | `output`     | bytes   | uint8 [L, 6]| IR, START, E1, E2, E0, STOP one-hot |
-| `tx_id`      | bytes   | utf-8       | source transcript id |
-| `chunk_idx`  | int64   | ()          | 0-based chunk index within the transcript |
+| `tx_id`      | bytes   | utf-8       | source record id (`<tid>` or `<tid>__rc`) |
+| `chunk_idx`  | int64   | ()          | 0-based chunk index within the record |
 
 Padded positions have `input[..., 5] == 1` and all-zero labels; the
 loss layer masks them out.
@@ -79,23 +110,30 @@ The `drusilla train` command reads a TSV where the last column is a
 shard path. One line per shard:
 
 ```
-Homo_sapiens        tfrecords/Homo_sapiens.tfrecords
-Mus_musculus        tfrecords/Mus_musculus.tfrecords
+Homo_sapiens        tfrecords/Homo_sapiens.tfrecords.gz
+Mus_musculus        tfrecords/Mus_musculus.tfrecords.gz
 Danio_rerio         tfrecords/Danio_rerio.tfrecords
 ```
 
 Split by species (not by shard) into a training and a validation
-manifest; species must not appear in both.
+manifest; species must not appear in both. With hundreds of shards set
+`data.cycle_length: 0` in the config so every shard is read side by side
+(see [training.md](training.md)).
 
-## Reproducing the released vertebrate model
+## Reproducing the joint model
 
-The vertebrate release was trained on 51 species with 4 held-out
-validation species using the full Nextflow pipeline in
-[tiberius_orf_finder](https://github.com/Gaius-Augustus/tiberius_orf_finder).
-That pipeline runs on the group's HPC cluster and is not designed for
-outside reproduction; the resulting TFRecord shards are what would be
-handed to `drusilla train`. If you want a comparable dataset for your
-own clade, follow steps 1-3 above per species and combine the manifests.
+The joint model was trained on 425 species of six clades (68 vertebrates,
+88 insects, 32 land plants, 213 fungi, 18 diatoms, 6 green algae; the list
+is in [model_cfg/joint.yaml.draft](../model_cfg/joint.yaml.draft)) with
+label policy v2 and gzip shards, validated on 6 held-out species of three
+clades, using the full Nextflow pipeline in
+[tiberius_orf_finder](https://github.com/Gaius-Augustus/tiberius_orf_finder)
+(genome and RNA-seq retrieval, StringTie, labelling, chunking). That
+pipeline runs on the group's HPC cluster and is not designed for outside
+reproduction; the resulting TFRecord shards are what `drusilla train`
+consumed with [configs/joint.yaml](../configs/joint.yaml). For a dataset
+of your own, follow steps 1-3 above per species and combine the
+manifests.
 
 ## Notes
 
@@ -105,12 +143,11 @@ own clade, follow steps 1-3 above per species and combine the manifests.
   "..."` and `Parent=...`).
 - Antisense-only overlaps are labelled all-IR on purpose — the model
   should learn to reject them.
-- StringTie transcripts with strand `.` are treated as `+` (gffread
-  extracts them as the forward genomic sequence). A `+` reference CDS
-  inside such a transcript is labelled `kept_single` / `kept_multi` /
-  `kept_partial` instead of `antisense_ir`; only `-` reference CDS
-  overlap gives `antisense_ir` for them. TFRecords regenerated with this
-  code therefore differ for unstranded transcripts, and models trained
-  on earlier TFRecords were trained on the old labels.
+- Label policy v1 (per-clade models `vertebrates`, `insects`): unstranded
+  transcripts were labelled on the forward strand only, only the longest
+  contained CDS of a transcript was labelled, and the `partial` / `pseudo`
+  flags were ignored. TFRecords built with the current code differ from
+  those, so mixing v1 and v2 shards in one training run is not advisable;
+  rebuild the v1 shards instead.
 - Every StringTie transcript becomes a training example; there is no
   dropping in `label_transcripts.py`.

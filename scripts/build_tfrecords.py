@@ -9,8 +9,11 @@ Usage::
     python scripts/build_tfrecords.py \\
       --fasta   labels/<species>/transcripts_labelled.fa \\
       --labels  labels/<species>/labels.npz \\
-      --out     tfrecords/<species>.tfrecords \\
+      --out     tfrecords/<species>.tfrecords.gz \\
       --chunk-len 9999
+
+An ``--out`` name ending in ``.gz`` is written GZIP-compressed (about 45x
+smaller); ``--compression {auto,none,gzip}`` overrides the suffix rule.
 """
 
 from __future__ import annotations

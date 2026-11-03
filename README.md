@@ -9,10 +9,12 @@ writes a genomic GTF of CDS lines.
 
 > **Model availability.** The **vertebrate** model (`--model vertebrates`,
 > the default) is released; a preliminary **insect** model
-> (`--model insects`) is available as well. Models for other clades
-> are in training and will be added to [`model_cfg/`](model_cfg/) as
-> they become available. See the [Models](#models) section for the
-> current release table.
+> (`--model insects`) is available as well. A single **joint** model
+> covering vertebrates, insects, land plants, fungi, diatoms and green
+> algae (`--model joint`) is in training; on release it becomes the
+> default and replaces the per-clade models, which stay available by
+> name. See the [Models](#models) section for the current release table
+> and what changes with the joint model.
 
 ---
 
@@ -149,26 +151,38 @@ See [docs/annotate.md](docs/annotate.md) for the full flag reference.
 StringTie leaves single-exon transcripts of unstranded libraries without a
 strand (`.`). Drusilla models these on the forward strand, as `gffread`
 extracts them. Three optional mechanisms recover genes that such
-assemblies otherwise miss; they are clade-independent and off by default
-(see [docs/annotate.md](docs/annotate.md) for details and
-[docs/strand_fix.md](docs/strand_fix.md) for the BAM-level alternative):
+assemblies otherwise miss (see [docs/annotate.md](docs/annotate.md) for
+details and [docs/strand_fix.md](docs/strand_fix.md) for the BAM-level
+alternative):
 
 | Flag | Effect |
 |---|---|
-| `--unstranded-both-strands` | Also scan the reverse complement of every `.` transcript (record `<tid>__rc`) and keep the orientation with the longest ORF (`--unstranded-pick both` keeps both). Needed for minus-strand genes on unstranded single-exon transcripts. |
+| `--unstranded-both-strands` | Also scan the reverse complement of every `.` transcript (record `<tid>__rc`). `--unstranded-pick` decides what is kept: `nonoverlap` keeps the ORFs of both orientations, longest first, minus those overlapping a kept ORF on the genome (the rule matching the joint model's training labels); `longest` keeps only the orientation with the longest ORF; `both` keeps everything. Needed for minus-strand genes on unstranded single-exon transcripts. |
 | `--flank-bp K --flank-3p-bp K --flank-keep` | Add `K` bp of genomic context on both sides of each transcript and keep ORFs whose start or stop falls in that flank ("ORF completion" of 5'/3'-truncated assemblies). Completed ORFs carry the GTF attribute `completion` (`5p`, `3p` or `5p3p`); `--flank-min-tx-frac` (default 0.5) limits how much of an ORF may lie outside the transcript. |
-| `--orfs-per-tx N` | Emit up to `N` ORFs per transcript, longest first (`0` = all; default 1). Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... Needed for fused transcripts that carry several genes. |
+| `--orfs-per-tx N` | Emit up to `N` ORFs per transcript, longest first (`0` = all). Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... Needed for fused transcripts that carry several genes. |
 | `--fix-strand` (with `--bam`) | Recover per-run library strandedness in a pooled BAM before StringTie, so fewer `.` transcripts are assembled in the first place. |
 
+The built-in defaults are the conservative ones (forward strand only,
+`longest`, one ORF per transcript, no flanks). A model's manifest can
+preset these options (`annotate_defaults`, see
+[`model_cfg/README.md`](model_cfg/README.md)): the joint model turns on
+both-strand scanning with `nonoverlap`, all ORFs per transcript and
+500 bp flanks with ORF completion, because that is how its training
+labels were built and how it was benchmarked. Anything given on the
+command line wins (`--no-unstranded-both-strands`, `--orfs-per-tx 1`,
+`--flank-bp 0` ...). The `vertebrates` and `insects` manifests set
+nothing, so their behaviour is unchanged.
+
 Example for a compact genome assembled from pooled, partly unstranded
-RNA-seq:
+RNA-seq with a per-clade model (the joint model applies these settings by
+itself):
 
 ```bash
 drusilla annotate \
   --bam           pooled.sorted.bam --fix-strand \
   --genome        genome.fa \
   --model         vertebrates \
-  --unstranded-both-strands \
+  --unstranded-both-strands --unstranded-pick nonoverlap \
   --flank-bp 500 --flank-3p-bp 500 --flank-keep \
   --orfs-per-tx 0 \
   --out-dir       results/
@@ -176,20 +190,32 @@ drusilla annotate \
 
 ## Models
 
-Only the **vertebrate** and **insect** models are released today. Other
-clades are in training; this table will grow as their manifests land in
-[`model_cfg/`](model_cfg/).
+Only the **vertebrate** and **insect** models are released today. The
+**joint** model is in training and will replace them as the default; its
+manifest is prepared as [`model_cfg/joint.yaml.draft`](model_cfg/joint.yaml.draft)
+and becomes visible to `drusilla models list` once renamed to `joint.yaml`
+at release.
 
 | Name (`--model`)   | Clade / target      | Status         | Architecture       | Notes |
 |--------------------|---------------------|----------------|--------------------|-------|
-| `vertebrates`      | Vertebrata          | **Released**   | CNN + BiLSTM (6-state HMM head) | Default. Trained on 51 vertebrate species; validated on 4 held-out species. |
-| `embryophyta`      | Land plants         | In training    | —                  | Planned. |
-| `fungi`            | Fungi               | In training    | —                  | Planned. |
+| `joint`            | Vertebrata, Insecta, Embryophyta, Fungi, diatoms, Chlorophyta | **In training** | CNN + BiLSTM (6-state HMM head) | One model for all clades, trained on 425 species with label policy v2 ([docs/data_prep.md](docs/data_prep.md)), validated on 6 held-out species of 3 clades. Becomes the default on release. In the test benchmarks it matched or beat every per-clade model (mean gene-level F1 +2.9, land plants +8.8). |
+| `vertebrates`      | Vertebrata          | **Released**   | CNN + BiLSTM (6-state HMM head) | Default until the joint release. Trained on 51 vertebrate species; validated on 4 held-out species. |
 | `insects`          | Insecta             | **Preliminary** | CNN + BiLSTM (6-state HMM head) | Trained on the 99 insect species listed in the manifest. |
+| `embryophyta`, `fungi` | Land plants, Fungi | — | — | No separate models; covered by `joint`. |
 
-Applying a released model to species from another clade is technically
-possible but the predictions are not benchmarked and will underperform.
-Wait for the matching clade release, or train your own with
+What changes with the joint model, apart from the clades it covers: its
+manifest presets both-strand scanning of unstranded transcripts with the
+`nonoverlap` rule, no cap on ORFs per transcript and 500 bp genomic flanks
+with ORF completion (see
+[Unstranded, truncated and fused transcripts](#unstranded-truncated-and-fused-transcripts)),
+so `drusilla annotate --model joint` needs none of those flags. Its
+training data follow label policy v2, so its predictions can contain
+several genes per fused transcript and minus-strand genes on unstranded
+transcripts, which the per-clade models never emit.
+
+Applying a released per-clade model to species from another clade is
+technically possible but the predictions are not benchmarked and will
+underperform. Use the joint model once released, or train your own with
 `drusilla train` (see [docs/training.md](docs/training.md)).
 
 Model releases are described by per-model manifests under
@@ -230,13 +256,18 @@ Given a prepared TFRecord dataset, train a model:
 drusilla train \
   --train-manifest results/tfrecords/train_manifest.tsv \
   --val-manifest   results/tfrecords/val_manifest.tsv \
-  --config         configs/vertebrates.yaml \
+  --config         configs/joint.yaml \
   --out-dir        results/models/run_001
+# after a walltime limit: same command plus --resume
 ```
 
-Manifests are two-column TSVs: `species<TAB>path/to/shard.tfrecords`
-(one line per shard). See [docs/training.md](docs/training.md) for full
-details.
+Manifests are two-column TSVs: `species<TAB>path/to/shard.tfrecords[.gz]`
+(one line per shard; gzip shards are read transparently).
+[`configs/joint.yaml`](configs/joint.yaml) is the configuration of the
+joint model, [`configs/vertebrates.yaml`](configs/vertebrates.yaml) that
+of the per-clade models. `--resume` continues a run from its newest epoch
+checkpoint, including the learning rate it had reached. See
+[docs/training.md](docs/training.md) for full details.
 
 Preparing the TFRecords from raw genomes + reference annotations is a
 larger data-generation pipeline, described separately in

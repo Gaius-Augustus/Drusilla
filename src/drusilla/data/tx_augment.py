@@ -403,3 +403,88 @@ def resolve_orf(
         iv = [(s - fi.k5, e - fi.k5) for s, e in clipped]
         return ResolvedOrf(iv, tx, None, iv[0][0], iv[-1][1], "clipped_5p")
     return "dropped_in_flank"
+
+
+def select_nonoverlapping(
+    candidates: list[tuple[int, list[tuple[int, int]]]],
+) -> list[int]:
+    """Indices of the ORFs to keep among ``(coding_length, genomic_segments)``
+    candidates of one transcript (both orientations of an unstranded one
+    included): longest first, dropping every ORF that shares genomic bases
+    with an already kept one. Ties keep the earlier candidate. Returned in
+    input order."""
+    order = sorted(range(len(candidates)), key=lambda i: (-candidates[i][0], i))
+    kept: list[int] = []
+    taken: list[tuple[int, int]] = []
+    for i in order:
+        segs = candidates[i][1]
+        if any(s < t_e and t_s < e for s, e in segs for t_s, t_e in taken):
+            continue
+        kept.append(i)
+        taken.extend(segs)
+    return sorted(kept)
+
+
+def pick_orientation(fwd_best: int | None, rc_best: int | None) -> str:
+    """Which copy of an unstranded transcript to keep: ``'fwd'`` or ``'rc'``.
+    Ties and absent rc go to the forward copy."""
+    if rc_best is None:
+        return "fwd"
+    if fwd_best is None:
+        return "rc"
+    return "rc" if rc_best > fwd_best else "fwd"
+
+
+# ---------------------------------------------------------------------------
+# postprocess policy: what to do with one decoded ORF
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ResolvedOrf:
+    intervals: list[tuple[int, int]]        # coordinates of `model`
+    model: StringTieTranscript              # transcript proper or flank-extended model
+    completion: str | None                  # None, "5p", "3p", "5p3p"
+    tx_start: int                           # ORF start relative to transcript proper
+    tx_end: int                             # ORF end relative to transcript proper
+    outcome: str                            # counter key
+
+
+def resolve_orf(
+    cds: list[tuple[int, int]],
+    tx: StringTieTranscript,
+    fi: FlankInfo | None,
+    keep: bool = False,
+    clip: bool = False,
+    min_tx_frac: float = 0.5,
+) -> ResolvedOrf | str:
+    """Apply the padding policy to one decoded ORF (padded-record coords).
+
+    Returns a :class:`ResolvedOrf`, or a string naming why it was dropped:
+    ``dropped_in_npad`` (START/STOP inside literal Ns), ``dropped_flank_only``
+    (too little of the ORF inside the assembled transcript), ``dropped_3p_flank``
+    (STOP in the 3' flank but ``keep`` is off), ``dropped_in_flank`` (START in
+    the 5' flank, neither ``keep`` nor ``clip``, or nothing left after clipping).
+    """
+    cds = sorted(cds)
+    if fi is None:
+        return ResolvedOrf(cds, tx, None, cds[0][0], cds[-1][1], "unpadded")
+    pl = place_orf(cds, fi)
+    if pl.in_npad:
+        return "dropped_in_npad"
+    if not pl.in_flank:
+        iv = [(s - fi.k5, e - fi.k5) for s, e in cds]
+        return ResolvedOrf(iv, tx, None, pl.tx_start, pl.tx_end, "unchanged")
+    if keep:
+        if pl.coding_len == 0 or pl.tx_overlap / pl.coding_len < min_tx_frac:
+            return "dropped_flank_only"
+        return ResolvedOrf(pl.model_intervals(fi), fi.model, pl.completion,
+                           pl.tx_start, pl.tx_end, "completed")
+    if pl.ext3 > 0:
+        return "dropped_3p_flank"
+    if clip:
+        clipped = clip_5p(cds, fi.k5)
+        if clipped is None:
+            return "dropped_in_flank"
+        iv = [(s - fi.k5, e - fi.k5) for s, e in clipped]
+        return ResolvedOrf(iv, tx, None, iv[0][0], iv[-1][1], "clipped_5p")
+    return "dropped_in_flank"

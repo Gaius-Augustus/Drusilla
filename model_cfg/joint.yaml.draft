@@ -1,0 +1,486 @@
+# Drusilla model manifest — joint (multi-clade) model. DRAFT.
+#
+# Rename to joint.yaml (and fill the TODO fields) when the weights are
+# released; the registry only reads model_cfg/*.yaml, so this draft is not
+# visible to `drusilla models list`. Release steps: model_cfg/README.md.
+#
+# Archive layout (after tar -xzf):
+#   joint/
+#     model.weights.h5   — chosen epoch of results/models/cnn_lstm_joint_run001
+#     arch.yaml          — configs/joint.yaml (architecture + data block)
+#
+# Field reference: see vertebrates.yaml. New in this manifest:
+#   label_policy        the label policy the training data was built with
+#   annotate_defaults   inference options preset for `drusilla annotate --model joint`
+#                       (command-line values win; see docs/annotate.md)
+
+name: joint
+version: "1.0"
+target_clade: "Eukaryota: vertebrates, insects, embryophyta, fungi, diatoms, chlorophyta"
+ncbi_tax_id: 2759
+weights_url: "TODO https://bioinf.uni-greifswald.de/bioinf/drusilla/joint.tar.gz"
+weights_sha256: "TODO sha256sum joint.tar.gz"
+# TODO: epoch_NN.weights.h5 (best val_loss, see train_log.tsv) of results/models/cnn_lstm_joint_run001
+training_run: "cnn_lstm_joint_run001"
+drusilla_version: "0.3.0"
+default_chunk_len: 9999
+date: "TODO YYYY-MM-DD"
+architecture: "cnn_lstm"
+label_policy: "v2"   # both orientations of unstranded transcripts, every non-overlapping CDS per transcript,
+                     # RefSeq partial=true / pseudo=true CDS treated as incomplete (docs/data_prep.md)
+comment: >-
+  One model for all clades, trained on the pooled label-policy-v2 TFRecords of
+  425 species (68 vertebrates, 88 insects, 32 embryophyta, 213 fungi, 18 diatoms, 6 chlorophyta) with configs/joint.yaml; validated on Ornithorhynchus anatinus, Petromyzon marinus, Drosophila ananassae, Drosophila virilis, Tenebrio molitor, Populus trichocarpa.
+  Replaces the per-clade models vertebrates / insects as the default.
+
+# Inference options that match the training labels (policy v2) and the
+# genomic-flank ORF completion used in the test benchmarks of all clades.
+# Each can be overridden on the command line (--no-unstranded-both-strands,
+# --unstranded-pick longest, --orfs-per-tx 1, --flank-bp 0 ...).
+annotate_defaults:
+  unstranded_both_strands: true
+  unstranded_pick: nonoverlap
+  orfs_per_tx: 0
+  flank_bp: 500
+  flank_3p_bp: 500
+  flank_keep: true
+
+validation_species:
+  - Ornithorhynchus_anatinus
+  - Petromyzon_marinus
+  - Drosophila_ananassae
+  - Drosophila_virilis
+  - Tenebrio_molitor
+  - Populus_trichocarpa
+training_species:
+  # vertebrates (68)
+  - Acipenser_ruthenus
+  - Alligator_mississippiensis
+  - Alosa_sapidissima
+  - Amblyraja_radiata
+  - Anguilla_anguilla
+  - Anolis_sagrei
+  - Aotus_nancymaae
+  - Apus_apus
+  - Bombina_bombina
+  - Callithrix_jacchus
+  - Camelus_bactrianus
+  - Canis_lupus_familiaris
+  - Carcharodon_carcharias
+  - Cavia_porcellus
+  - Ceratotherium_simum
+  - Chinchilla_lanigera
+  - Condylura_cristata
+  - Corvus_cornix_cornix
+  - Dendropsophus_ebraccatus
+  - Denticeps_clupeoides
+  - Desmodus_rotundus
+  - Dipodomys_merriami
+  - Emys_orbicularis
+  - Enhydra_lutris
+  - Eptesicus_fuscus
+  - Equus_caballus
+  - Erpetoichthys_calabaricus
+  - Esox_lucius
+  - Eublepharis_macularius
+  - Falco_peregrinus
+  - Gavia_stellata
+  - Heloderma_suspectum
+  - Heterocephalus_glaber
+  - Ictidomys_tridecemlineatus
+  - Jaculus_jaculus
+  - Labrus_mixtus
+  - Latimeria_chalumnae
+  - Lepisosteus_oculatus
+  - Loxodonta_africana
+  - Marmota_monax
+  - Megalops_cyprinoides
+  - Microcebus_murinus
+  - Microtus_ochrogaster
+  - Mobula_birostris
+  - Mus_musculus
+  - Mus_pahari
+  - Narcine_bancroftii
+  - Neomonachus_schauinslandi
+  - Ochotona_curzoniae
+  - Octodon_degus
+  - Osmerus_eperlanus
+  - Otolemur_garnettii
+  - Panthera_tigris
+  - Parambassis_ranga
+  - Pelobates_fuscus
+  - Podarcis_muralis
+  - Propithecus_coquereli
+  - Puma_concolor
+  - Rana_temporaria
+  - Rattus_norvegicus
+  - Rhinatrema_bivittatum
+  - Saimiri_boliviensis
+  - Scleropages_formosus
+  - Solea_solea
+  - Sorex_araneus
+  - Sparus_aurata
+  - Trichechus_manatus
+  - Zalophus_californianus
+  # insects (88)
+  - Aedes_aegypti
+  - Agrotis_ipsilon
+  - Amphipyra_tragopoginis
+  - Anabrus_simplex
+  - Anastrepha_ludens
+  - Anopheles_arabiensis
+  - Anopheles_farauti
+  - Anopheles_stephensi
+  - Aphis_glycines
+  - Apis_mellifera
+  - Aporophyla_lueneburgensis
+  - Armigeres_subalbatus
+  - Bactrocera_dorsalis
+  - Bactrocera_minax
+  - Bactrocera_oleae
+  - Bactrocera_tryoni
+  - Bicyclus_anynana
+  - Bombus_impatiens
+  - Bradysia_coprophila
+  - Calliphora_vicina
+  - Camponotus_floridanus
+  - Ceratitis_capitata
+  - Chilo_suppressalis
+  - Chrysoperla_carnea
+  - Cimex_lectularius
+  - Cochliomyia_hominivorax
+  - Cryptotermes_secundus
+  - Culex_quinquefasciatus
+  - Dendroctonus_ponderosae
+  - Dermacentor_andersoni
+  - Diuraphis_noxia
+  - Drosophila_birchii
+  - Drosophila_grimshawi
+  - Drosophila_navojoa
+  - Drosophila_obscura
+  - Drosophila_suzukii
+  - Ennomos_fuscantarius
+  - Episyrphus_balteatus
+  - Frankliniella_occidentalis
+  - Galleria_mellonella
+  - Glossina_palpalis
+  - Gryllus_bimaculatus
+  - Harpegnathos_saltator
+  - Helicoverpa_zea
+  - Hermetia_illucens
+  - Hormaphis_cornu
+  - Hycleus_cichorii
+  - Ips_nitidus
+  - Lasiommata_megera
+  - Leptopilina_boulardi
+  - Malaya_genurostris
+  - Melanaphis_sacchari
+  - Melitaea_cinxia
+  - Metopolophium_dirhodum
+  - Monomorium_pharaonis
+  - Musca_domestica
+  - Mythimna_separata
+  - Nasonia_vitripennis
+  - Nicrophorus_vespilloides
+  - Onthophagus_taurus
+  - Ooceraea_biroi
+  - Operophtera_brumata
+  - Oryctes_rhinoceros
+  - Ostrinia_furnacalis
+  - Pediculus_humanus
+  - Periplaneta_americana
+  - Phlebotomus_papatasi
+  - Plodia_interpunctella
+  - Pogonomyrmex_californicus
+  - Polypedilum_vanderplanki
+  - Propsilocerus_akamusi
+  - Rhogogaster_chlorosoma
+  - Rhopalosiphum_padi
+  - Rhynchophorus_ferrugineus
+  - Schizaphis_graminum
+  - Schlechtendalia_chinensis
+  - Sipha_flava
+  - Sitobion_avenae
+  - Sitophilus_oryzae
+  - Sogatella_furcifera
+  - Solenopsis_invicta
+  - Spodoptera_litura
+  - Stomoxys_calcitrans
+  - Temnothorax_longispinosus
+  - Thrips_palmi
+  - Thymelicus_sylvestris
+  - Trichoplusia_ni
+  - Zeugodacus_cucurbitae
+  # embryophyta (32)
+  - Acorus_americanus
+  - Aquilegia_coerulea
+  - Arundo_donax
+  - Beta_vulgaris
+  - Brassica_rapa
+  - Capparis_spinosa
+  - Chasmanthium_laxum
+  - Citrus_limon
+  - Cleome_violacea
+  - Coffea_arabica
+  - Daucus_carota
+  - Dioscorea_alata
+  - Eucalyptus_grandis
+  - Fragaria_vesca
+  - Glycine_max
+  - Gossypium_hirsutum
+  - Joinvillea_ascendens
+  - Lactuca_sativa
+  - Lindenbergia_philippensis
+  - Malus_domestica
+  - Mentha_longifolia
+  - Miscanthus_sinensis
+  - Moringa_oleifera
+  - Musa_acuminata
+  - Myrothamnus_flabellifolia
+  - Oryza_sativa
+  - Panicum_virgatum
+  - Pharus_latifolius
+  - Setaria_viridis
+  - Ulmus_americana
+  - Yucca_filamentosa
+  - Zingiber_officinale
+  # fungi (213)
+  - Aaosphaeria_arxii
+  - Alternaria_burnsii
+  - Alternaria_rosae
+  - Amorphotheca_resinae
+  - Annulohypoxylon_maeteangense
+  - Annulohypoxylon_truncatum
+  - Ascochyta_rabiei
+  - Aspergillus_aculeatus
+  - Aspergillus_alliaceus
+  - Aspergillus_brunneoviolaceus
+  - Aspergillus_caelatus
+  - Aspergillus_campestris
+  - Aspergillus_candidus
+  - Aspergillus_chevalieri
+  - Aspergillus_fijiensis
+  - Aspergillus_fischeri
+  - Aspergillus_glaucus
+  - Aspergillus_heteromorphus
+  - Aspergillus_homomorphus
+  - Aspergillus_ibericus
+  - Aspergillus_japonicus
+  - Aspergillus_lentulus
+  - Aspergillus_neoniger
+  - Aspergillus_piperis
+  - Aspergillus_puulaauensis
+  - Aspergillus_saccharolyticus
+  - Aspergillus_sclerotioniger
+  - Aspergillus_steynii
+  - Aspergillus_sydowii
+  - Aspergillus_tubingensis
+  - Aspergillus_udagawae
+  - Aspergillus_uvarum
+  - Aspergillus_vadensis
+  - Aspergillus_versicolor
+  - Aspergillus_viridinutans
+  - Aspergillus_wentii
+  - Aureobasidium_melanogenum
+  - Aureobasidium_pullulans
+  - Batrachochytrium_dendrobatidis
+  - Beauveria_bassiana
+  - Bipolaris_oryzae
+  - Boeremia_exigua
+  - Botrytis_byssoidea
+  - Botrytis_cinerea
+  - Botrytis_deweyae
+  - Botrytis_fragariae
+  - Botrytis_porri
+  - Botrytis_sinoallii
+  - Candida_albicans
+  - Candida_orthopsilosis
+  - Candida_parapsilosis
+  - Chaetomium_fimeti
+  - Chaetomium_strumarium
+  - Chaetomium_tenue
+  - Clavispora_lusitaniae
+  - Coccidioides_immitis
+  - Cokeromyces_recurvatus
+  - Colletotrichum_acutatum
+  - Colletotrichum_godetiae
+  - Colletotrichum_graminicola
+  - Colletotrichum_navitas
+  - Colletotrichum_phormii
+  - Cryptococcus_amylolentus
+  - Cryptococcus_bacillisporus
+  - Cryptococcus_decagattii
+  - Cryptococcus_deuterogattii
+  - Cryptococcus_gattii
+  - Cryptococcus_neoformans
+  - Cryptococcus_tetragattii
+  - Cyberlindnera_jadinii
+  - Daldinia_caldariorum
+  - Daldinia_decipiens
+  - Daldinia_vernicosa
+  - Debaryomyces_fabryi
+  - Debaryomyces_hansenii
+  - Desarmillaria_tabescens
+  - Diaporthe_amygdali
+  - Dichomitus_squalens
+  - Didymella_exigua
+  - Dioszegia_hungarica
+  - Dothidotthia_symphoricarpi
+  - Drechmeria_coniospora
+  - Drepanopeziza_brunnea
+  - Durotheca_rogersii
+  - Emericellopsis_atlantica
+  - Exophiala_dermatitidis
+  - Exophiala_oligosperma
+  - Exophiala_spinifera
+  - Exophiala_viscosa
+  - Exophiala_xenobiotica
+  - Fomitiporia_mediterranea
+  - Fulvia_fulva
+  - Fusarium_fujikuroi
+  - Fusarium_mangiferae
+  - Fusarium_odoratissimum
+  - Fusarium_proliferatum
+  - Fusarium_pseudograminearum
+  - Fusarium_redolens
+  - Fusarium_vanettenii
+  - Fusarium_venenatum
+  - Fusarium_verticillioides
+  - Gaeumannomyces_tritici
+  - Gamsiella_multidivaricata
+  - Gilbertella_persicaria
+  - Gloeophyllum_trabeum
+  - Halteromyces_radiatus
+  - Heterobasidion_irregulare
+  - Hyphopichia_burtonii
+  - Hypoxylon_fragiforme
+  - Hypoxylon_trugodes
+  - Ilyonectria_robusta
+  - Kickxella_alabastrina
+  - Kluyveromyces_lactis
+  - Kluyveromyces_marxianus
+  - Kockovaella_imperatae
+  - Komagataella_phaffii
+  - Kuraishia_capsulata
+  - Lachancea_thermotolerans
+  - Laetiporus_sulphureus
+  - Lasiodiplodia_theobromae
+  - Lasiosphaeria_miniovina
+  - Lentinula_edodes
+  - Linderina_pennispora
+  - Lindgomyces_ingoldianus
+  - Lipomyces_tetrasporus
+  - Lobosporangium_transversale
+  - Macroventuria_anomochaeta
+  - Metarhizium_brunneum
+  - Metarhizium_robertsii
+  - Mollisia_scopiformis
+  - Morchella_importuna
+  - Mucor_mucedo
+  - Mucor_velutinosus
+  - Mycotypha_africana
+  - Mytilinidion_resinicola
+  - Myxozyma_melibiosi
+  - Nakaseomyces_glabratus
+  - Neohortaea_acidophila
+  - Neurospora_crassa
+  - Neurospora_tetraspora
+  - Paecilomyces_variotii
+  - Paraphaeosphaeria_sporulosa
+  - Parathielavia_appendiculata
+  - Penicillium_atrosanguineum
+  - Penicillium_brevicompactum
+  - Penicillium_chrysogenum
+  - Penicillium_coprophilum
+  - Penicillium_digitatum
+  - Penicillium_expansum
+  - Penicillium_oxalicum
+  - Penicillium_solitum
+  - Penicillium_subrubescens
+  - Phycomyces_blakesleeanus
+  - Phyllosticta_capitalensis
+  - Phyllosticta_citribraziliensis
+  - Plenodomus_lingam
+  - Pleurotus_ostreatus
+  - Polychytrium_aggregatum
+  - Postia_placenta
+  - Priceomyces_carsonii
+  - Pseudocercospora_fijiensis
+  - Pseudogymnoascus_verrucosus
+  - Pseudomassariella_vexata
+  - Pseudozyma_hubeiensis
+  - Psilocybe_cubensis
+  - Purpureocillium_lilacinum
+  - Pyricularia_grisea
+  - Pyricularia_oryzae
+  - Radiomyces_spectabilis
+  - Ramularia_collo-cygni
+  - Rhizophagus_irregularis
+  - Rhizopus_microsporus
+  - Rhodotorula_toruloides
+  - Saccharomyces_cerevisiae
+  - Saccharomyces_kudriavzevii
+  - Saccharomyces_mikatae
+  - Saccharomyces_paradoxus
+  - Saitoella_complicata
+  - Scheffersomyces_amazonensis
+  - Scheffersomyces_stipitis
+  - Scheffersomyces_xylosifermentans
+  - Schizosaccharomyces_cryophilus
+  - Schizosaccharomyces_japonicus
+  - Schizosaccharomyces_octosporus
+  - Schizosaccharomyces_pombe
+  - Sordaria_macrospora
+  - Sphaerulina_musiva
+  - Spizellomyces_punctatus
+  - Suillus_bovinus
+  - Suillus_clintonianus
+  - Suillus_fuscotomentosus
+  - Suillus_paluster
+  - Suillus_plorans
+  - Suillus_subalutaceus
+  - Talaromyces_proteolyticus
+  - Torulaspora_delbrueckii
+  - Trametes_versicolor
+  - Trematosphaeria_pertusa
+  - Trichoderma_aggressivum
+  - Trichoderma_breve
+  - Trichoderma_harzianum
+  - Trichoderma_reesei
+  - Trichoderma_virens
+  - Truncatella_angustata
+  - Umbelopsis_ramanniana
+  - Ustilaginoidea_virens
+  - Ustilago_hordei
+  - Ustilago_maydis
+  - Westerdykella_ornata
+  - Wickerhamomyces_anomalus
+  - Xylaria_bambusicola
+  - Yarrowia_lipolytica
+  - Zychaea_mexicana
+  # diatoms (18)
+  - Asterionella_formosa
+  - Chaetoceros_muelleri
+  - Chaetoceros_tenuissimus
+  - Conticribra_guillardii
+  - Conticribra_weissflogii
+  - Cyclostephanos_invisitatus
+  - Cyclotella_atomus
+  - Cyclotella_choctawhatcheeana
+  - Cylindrotheca_closterium
+  - Discostella_pseudostelligera
+  - Discostella_stelligera
+  - Mayamaea_pseudoterrestris
+  - Pseudo-nitzschia_multistriata
+  - Seminavis_robusta
+  - Skeletonema_menzelii
+  - Skeletonema_potamos
+  - Stephanodiscus_triporus
+  - Thalassiosira_mediterranea
+  # chlorophyta (6)
+  - Astrephomene_gubernaculifera
+  - Chlamydomonas_reinhardtii
+  - Chloropicon_primus
+  - Ostreococcus_lucimarinus
+  - Tetradesmus_obliquus
+  - Volvox_carteri
