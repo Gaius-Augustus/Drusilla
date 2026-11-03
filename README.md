@@ -7,11 +7,12 @@ writes a genomic GTF of CDS lines.
 
 [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) runs Drusilla in a Nextflow pipeline that combines it with ab initio predictions from [Tiberius](https://github.com/Gaius-Augustus/Tiberius).
 
-> **Model availability.** Only the **vertebrate** model is released at
-> the moment (`--model vertebrates`, the default). Models for
-> other clades are in training and will be added to
-> [`models.yaml`](models.yaml) as they become available. See the
-> [Models](#models) section for the current release table.
+> **Model availability.** The **vertebrate** model (`--model vertebrates`,
+> the default) is released; a preliminary **insect** model
+> (`--model insects`) is available as well. Models for other clades
+> are in training and will be added to [`model_cfg/`](model_cfg/) as
+> they become available. See the [Models](#models) section for the
+> current release table.
 
 ---
 
@@ -22,7 +23,7 @@ pip install "drusilla[gpu] @ git+https://github.com/Gaius-Augustus/Drusilla"
 ```
 
 The `[gpu]` extra pulls in TensorFlow, `bricks2marble`, `hidten`,
-`biopython`, and `pandas`. Without it you get only the CLI skeleton and
+`biopython`, `pandas`, and `pysam`. Without it you get only the CLI skeleton and
 the pure-Python data helpers; the annotate / train commands will fail to
 import TensorFlow.
 
@@ -175,15 +176,16 @@ drusilla annotate \
 
 ## Models
 
-Only the **vertebrate** and **insect** models are released today. Other clades are in
-training; this table will grow as they land in [`models.yaml`](models.yaml).
+Only the **vertebrate** and **insect** models are released today. Other
+clades are in training; this table will grow as their manifests land in
+[`model_cfg/`](model_cfg/).
 
 | Name (`--model`)   | Clade / target      | Status         | Architecture       | Notes |
 |--------------------|---------------------|----------------|--------------------|-------|
 | `vertebrates`      | Vertebrata          | **Released**   | CNN + BiLSTM (6-state HMM head) | Default. Trained on 51 vertebrate species; validated on 4 held-out species. |
 | `embryophyta`      | Land plants         | In training    | —                  | Planned. |
 | `fungi`            | Fungi               | In training    | —                  | Planned. |
-| `insecta`          | Insects             | **Preliminary model**        | —                  | — |
+| `insects`          | Insecta             | **Preliminary** | CNN + BiLSTM (6-state HMM head) | Trained on the 99 insect species listed in the manifest. |
 
 Applying a released model to species from another clade is technically
 possible but the predictions are not benchmarked and will underperform.
@@ -210,8 +212,10 @@ drusilla models download vertebrates
 ```
 
 Downloaded archives are verified against the manifest's SHA256, then
-extracted to `$XDG_CACHE_HOME/drusilla/models/<name>-v<version>/`
-(default: `~/.cache/drusilla/models/`). Set `DRUSILLA_CACHE_DIR` to
+extracted to `$XDG_CACHE_HOME/drusilla/models/<name>/` (default:
+`~/.cache/drusilla/models/`). A `.drusilla_version` marker in that
+directory records the manifest version, so bumping `version` in a
+manifest triggers a re-download. Set `DRUSILLA_CACHE_DIR` to
 override the cache location, or `DRUSILLA_MODEL_CFG_DIR` to add a
 directory of extra manifests (useful for staging a new release without
 editing the package).

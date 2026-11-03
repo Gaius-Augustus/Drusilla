@@ -355,3 +355,48 @@ def test_tar_slip_rejected(tmp_path: Path, monkeypatch):
 
     with pytest.raises(Exception):
         registry.resolve_model("fakemodel")
+
+
+def test_every_repo_manifest_is_discoverable():
+    """All model_cfg/*.yaml in the repo load through the registry."""
+    repo_cfg = Path(__file__).resolve().parents[1] / "model_cfg"
+    expected = {p.stem for p in repo_cfg.glob("*.yaml")}
+    assert {"vertebrates", "insects"} <= expected
+    assert expected <= set(registry.list_manifests())
+
+
+def test_wheel_force_includes_whole_model_cfg_dir():
+    """pip / container installs see every manifest only if the directory
+    (not single files) is force-included into the wheel."""
+    tomllib = pytest.importorskip("tomllib")
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    with pyproject.open("rb") as fh:
+        data = tomllib.load(fh)
+    fi = data["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert fi.get("model_cfg") == "drusilla/_bundled/model_cfg"
+
+
+def test_local_status_stale_version_is_not_cached(tmp_path: Path, monkeypatch):
+    """A cache dir whose version marker differs from the manifest is reported
+    as files_present but not cached, matching what resolve_model would do."""
+    workdir = tmp_path / "release"
+    workdir.mkdir()
+    archive = _make_fake_archive("fakemodel", workdir)
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+
+    r = registry.resolve_model("fakemodel")
+    st = registry.local_status("fakemodel")
+    assert st["cached"] is True and st["files_present"] is True
+    assert st["cached_version"] == "1.0"
+
+    (r.weights_path.parent / registry._VERSION_MARKER).write_text("0.9")
+    st = registry.local_status("fakemodel")
+    assert st["cached"] is False
+    assert st["files_present"] is True
+    assert st["cached_version"] == "0.9"
+    assert st["weights_path"] is not None

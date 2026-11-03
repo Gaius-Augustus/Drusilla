@@ -204,3 +204,24 @@ def test_gene_id_from_tx_strips_orf_suffixes():
     assert gene_id_from_tx("STRG.12.3__rc") == "STRG.12"
     assert gene_id_from_tx("STRG.12.3__rc.orf3") == "STRG.12"
     assert gene_id_from_tx("noiso") == "noiso"
+
+
+def test_find_dropable_identical_chains_keep_first_sorted():
+    # Two isoforms with identical CDS chains tie on exon count and span;
+    # the smaller tid is kept, the other is dropped and points at it.
+    by_tid = {
+        "STRG.3.2": _rec("chr1", "+", [(0, 100), (200, 300)]),
+        "STRG.3.1": _rec("chr1", "+", [(0, 100), (200, 300)]),
+    }
+    assert find_dropable(by_tid) == {"STRG.3.2": "STRG.3.1"}
+
+
+def test_find_dropable_keeper_is_highest_ranked_container():
+    # A is inside both B and C; C ranks first (more exons) and is reported.
+    by_tid = {
+        "STRG.4.1": _rec("chr1", "+", [(100, 150)]),
+        "STRG.4.2": _rec("chr1", "+", [(50, 200)]),
+        "STRG.4.3": _rec("chr1", "+", [(0, 250), (400, 500)]),
+    }
+    drop = find_dropable(by_tid)
+    assert drop == {"STRG.4.1": "STRG.4.3", "STRG.4.2": "STRG.4.3"}

@@ -110,7 +110,7 @@ Two options via `training.loss_type`:
 Padded positions (where `input[..., 5] == 1`) are always excluded from
 the loss and metrics.
 
-The released model have been trained with `cce_boundary_f1`.
+The released models were trained with `cce_boundary_f1`.
 
 ## Reported metrics
 
@@ -120,7 +120,7 @@ The released model have been trained with `cce_boundary_f1`.
 
 ## Hardware
 
-- Vertebrat model: Trained on a single 40 GB A100 GPU with batch size 400 and
+- Vertebrate model: trained on a single 40 GB A100 GPU with batch size 400 and
   `chunk_len=9999`.
 - Fine-tuning from released weights fits in ~10 GB with batch size 100.
 

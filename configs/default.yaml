@@ -1,8 +1,10 @@
 # Drusilla default architecture / training config.
 #
-# Used by the vertebrate model release. To fine-tune from these weights
-# on your own TFRecords, keep the `model:` block identical and tune the
-# `training:` block.
+# Generic starting point. The released vertebrate model was trained with
+# configs/vertebrates.yaml (same layer shapes; different dropout, learning
+# rate, loss and class weights). To fine-tune from released weights, keep
+# the `model:` block shape-compatible (conv_*, pool_size, lstm_units,
+# lstm_layers, head_hidden) and tune the `training:` block.
 
 data:
   chunk_len: 9999

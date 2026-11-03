@@ -87,3 +87,21 @@ def test_annotate_option_consistency():
                 ["--orfs-per-tx", "-1"]):
         with pytest.raises(SystemExit):
             _check_option_consistency(ap.parse_args(base + bad))
+
+
+def test_models_list_shows_all_bundled_models(capsys, tmp_path, monkeypatch):
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path))
+    assert main(["models", "list"]) == 0
+    out = capsys.readouterr().out
+    assert "vertebrates" in out and "insects" in out
+
+
+def test_strand_run_regex_default_matches_module_default():
+    """annotate --fix-strand uses the same run-id regex as strand-fix-bam, and
+    an explicit 'none' reaches fix_strand unchanged (one-library mode)."""
+    from drusilla.data.strand_fix_bam import DEFAULT_RUN_REGEX
+
+    ap = _build_parser()
+    base = ["annotate", "--bam", "a.bam", "--genome", "g.fa", "--out-dir", "o"]
+    assert ap.parse_args(base).strand_run_regex == DEFAULT_RUN_REGEX
+    assert ap.parse_args(base + ["--strand-run-regex", "none"]).strand_run_regex == "none"

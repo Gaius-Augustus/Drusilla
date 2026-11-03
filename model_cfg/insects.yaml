@@ -1,18 +1,18 @@
-# Drusilla model manifest — vertebrates.
+# Drusilla model manifest — insects.
 #
 # One YAML per released model. Follows the Tiberius model_cfg convention:
 # the file describes the release (URL, checksum, provenance) and the
 # archive at `weights_url` bundles the actual model artifacts.
 #
 # Archive layout (after tar -xzf):
-#   <name>-v<version>/
+#   <name>/
 #     model.weights.h5   — Keras .weights.h5 file
-#     arch.yaml    — architecture / data config (used by build_model_from_config)
+#     arch.yaml          — architecture / data config (used by build_model_from_config)
 #
 # Field reference:
 #   name                identifier (must match the filename stem)
-#   version             string; the cache dir includes it, so bumping
-#                       version invalidates cached copies on all clients
+#   version             string; written to the extracted dir's .drusilla_version
+#                       marker, so bumping it invalidates cached copies
 #   target_clade        free-text clade label (informational)
 #   ncbi_tax_id         NCBI taxonomy id of the clade (informational)
 #   weights_url         HTTPS URL to the .tar.gz archive

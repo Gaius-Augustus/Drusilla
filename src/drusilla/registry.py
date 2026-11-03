@@ -3,12 +3,13 @@
 Each released model is described by a `model_cfg/<name>.yaml` file
 (bundled with the package, plus optional overrides — see
 ``DRUSILLA_MODEL_CFG_DIR``). The manifest's ``weights_url`` points at a
-``.tar.gz`` archive whose contents extract to a directory
-``<name>-v<version>/`` containing:
+``.tar.gz`` archive whose contents extract to a directory ``<name>/``
+containing:
 
-    weights.h5   Keras weights file
-    arch.yaml    architecture / data config (parsed by
-                 ``drusilla.model.model.build_model_from_config``)
+    model.weights.h5   Keras weights file (a plain ``weights.h5`` is
+                       renamed on extraction, see ``_resolve_weights_path``)
+    arch.yaml          architecture / data config (parsed by
+                       ``drusilla.model.model.build_model_from_config``)
 
 Resolution flow for ``drusilla annotate --model <name>``:
 
@@ -16,9 +17,10 @@ Resolution flow for ``drusilla annotate --model <name>``:
 2. If the extracted directory is already present in the cache with all
    expected files, use it directly (no network).
 3. Otherwise download the archive and extract it into the cache,
-   returning the paths. To force a redownload after a new release,
-   bump the manifest's ``version`` field (the cache dirname includes
-   it) or run ``drusilla models download NAME --force``.
+   returning the paths. The extracted directory is stamped with the
+   manifest version (``.drusilla_version`` marker), so bumping the
+   manifest's ``version`` field triggers a re-download, as does
+   ``drusilla models download NAME --force``.
 
 Runtime overrides:
 
@@ -266,7 +268,8 @@ def _safe_extract(archive: Path, dest_parent: Path, expected_dirname: str) -> Pa
 
     Guards against path-traversal ('tar-slip') by rejecting members whose
     resolved path escapes ``dest_parent``. Also refuses archives that
-    don't produce the expected top-level directory ``<name>-v<version>/``.
+    don't produce the expected top-level directory ``expected_dirname``
+    (the model name, see ``ModelManifest.extract_dirname``).
     """
     dest_parent = dest_parent.resolve()
     with tarfile.open(archive, mode="r:*") as tf:
@@ -349,11 +352,11 @@ def resolve_model(name: str, *, force: bool = False) -> ResolvedModel:
     """Return a :class:`ResolvedModel` for ``name``, downloading if needed.
 
     If the extracted directory already exists in the cache with both
-    expected files, it is reused. With ``force=True`` the archive is
+    expected files and a ``.drusilla_version`` marker equal to the
+    manifest version, it is reused. With ``force=True`` the archive is
     re-downloaded and re-extracted from scratch. To force a re-download
     across a manifest change without touching ``force``, bump the
-    ``version`` field in the manifest — the cache directory name
-    (``<name>-v<version>``) changes with it.
+    ``version`` field in the manifest — the marker then no longer matches.
     """
     mf = load_manifest(name)
 
@@ -451,16 +454,27 @@ def clear(name: str) -> list[Path]:
 
 
 def local_status(name: str) -> dict[str, Any]:
-    """Describe the local cache state of ``name``."""
+    """Describe the local cache state of ``name``.
+
+    ``cached`` is True only when :func:`resolve_model` would reuse the
+    extracted directory without downloading: both expected files exist
+    and the ``.drusilla_version`` marker equals the manifest version.
+    ``files_present`` ignores the marker (stale cache of an older
+    release); ``cached_version`` is the marker value or ``None``.
+    """
     mf = load_manifest(name)
     extract_dir = cache_dir() / mf.extract_dirname
     weights_path, arch_path = _expected_files(extract_dir)
-    cached = weights_path is not None and arch_path.exists()
+    files_present = weights_path is not None and arch_path.exists()
+    cached_version = _read_cached_version(extract_dir) if files_present else None
+    cached = files_present and cached_version == mf.version
     return {
         "name": name,
         "version": mf.version,
         "cached": cached,
-        "extract_dir": str(extract_dir) if cached else None,
-        "weights_path": str(weights_path) if cached else None,
-        "arch_config_path": str(arch_path) if cached else None,
+        "files_present": files_present,
+        "cached_version": cached_version,
+        "extract_dir": str(extract_dir) if files_present else None,
+        "weights_path": str(weights_path) if files_present else None,
+        "arch_config_path": str(arch_path) if files_present else None,
     }

@@ -47,6 +47,8 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
+from ..data import strand_fix_bam as _sfb
+
 os.environ.setdefault("TF_GPU_ALLOCATOR", "cuda_malloc_async")
 
 
@@ -145,7 +147,8 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                          "... Needed for fused transcripts.")
 
     ap.add_argument("--threads", type=int, default=4,
-                    help="Threads for stringtie/gffread/BAM processing.")
+                    help="Threads for StringTie and for BAM (de)compression "
+                         "under --fix-strand (gffread is single-threaded).")
     ap.add_argument("--longread", action="store_true",
                     help="Pass -L to StringTie (long-read assembly mode).")
     ap.add_argument("--fix-strand", action="store_true",
@@ -153,7 +156,7 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                          "first (XS tags on all reads of stranded runs; see "
                          "`drusilla strand-fix-bam`) and run StringTie on the "
                          "fixed BAM. Needs pysam. Writes strand_runs.tsv.")
-    ap.add_argument("--strand-run-regex", default=None,
+    ap.add_argument("--strand-run-regex", default=_sfb.DEFAULT_RUN_REGEX,
                     help="With --fix-strand: regex whose group 1 is the run "
                          "id in a read name (default: leading letters+digits, "
                          "e.g. SRR123456); 'none': the BAM is one library.")
@@ -508,7 +511,8 @@ def run(args: argparse.Namespace) -> int:
     _check_option_consistency(args)
     weights_path, config_path = _resolve_model_paths(args)
 
-    cfg = yaml.safe_load(open(config_path))
+    with open(config_path) as fh:
+        cfg = yaml.safe_load(fh)
     dc, mc = cfg["data"], cfg["model"]
     chunk_len = dc["chunk_len"]
 
@@ -535,7 +539,7 @@ def run(args: argparse.Namespace) -> int:
             print(f"Recovering per-run library strandedness -> {sfix_bam}", flush=True)
             summary = sfb.fix_strand(
                 bam, sfix_bam, report,
-                run_regex=args.strand_run_regex or sfb.DEFAULT_RUN_REGEX,
+                run_regex=args.strand_run_regex,
                 threads=args.threads, index=False,
             )
             print(
@@ -781,6 +785,11 @@ def run(args: argparse.Namespace) -> int:
                     if args.min_utr_3 > 0 and (tx_len - res.tx_end) < args.min_utr_3:
                         continue
                 coding_length = sum(e - s for s, e in res.intervals)
+                # b2m applied --min-coding-length to the padded record;
+                # --flank-clip can shorten an ORF below it afterwards.
+                if args.min_coding_length > 0 and coding_length < args.min_coding_length:
+                    counters["dropped_short_after_clip"] += 1
+                    continue
                 lc = None
                 if classify_lorf is not None and tid in tx_seqs and res.tx_start >= 0:
                     lc = classify_lorf(tx_seqs[tid], res.tx_start)

@@ -35,7 +35,12 @@ def _cmd_list(_args: argparse.Namespace) -> int:
     for name in sorted(manifests):
         mf = manifests[name]
         st = registry.local_status(name)
-        cache = "cached" if st["cached"] else "not cached"
+        if st["cached"]:
+            cache = "cached"
+        elif st["files_present"]:
+            cache = f"stale (v{st['cached_version'] or '?'})"
+        else:
+            cache = "not cached"
         clade = mf.data.get("target_clade") or "-"
         arch = mf.data.get("architecture") or "-"
         print(f"{name:20s} v{mf.version:6s}  {cache:12s}  clade={clade}  arch={arch}")

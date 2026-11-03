@@ -32,12 +32,13 @@ If you pass `--config` together with `--model`, the local config
 overrides the arch config that ships in the model archive. Only useful
 when you know exactly what you're doing.
 
-> **Currently available: `vertebrates` only.** Other clade models
-> (embryophyta, fungi, insecta, …) are in training. See the
-> [Models table in the README](../README.md#models) for status. To use
-> Drusilla on a non-vertebrate species today, either train a model with
-> `drusilla train` (see [training.md](training.md)) or supply your own
-> weights via `--weights` / `--config`.
+> **Currently available: `vertebrates` (default) and a preliminary
+> `insects` model.** Other clade models (embryophyta, fungi, …) are in
+> training. See the [Models table in the README](../README.md#models)
+> for status. To use Drusilla on a species outside these clades today,
+> either train a model with `drusilla train` (see
+> [training.md](training.md)) or supply your own weights via
+> `--weights` / `--config`.
 
 ## Output
 
@@ -77,11 +78,11 @@ Extra outputs, only produced when their flag is set:
 | `--no-codon-emitter`     | off | Drop the hard ATG-at-START / not-stop-at-E2 / stop-at-STOP codon constraints (debug). |
 | `--restrict-start-to-ir-start` | off | Force the HMM's initial state distribution to `{IR, START}` (whole-transcript decode should never start mid-codon). |
 | `--ir-prior FLOAT`       | 0.5 | Under `--restrict-start-to-ir-start`, `P(start in IR)`. |
-| `--threads N`            | 4   | Threads for stringtie / gffread. |
+| `--threads N`            | 4   | Threads for StringTie and for BAM (de)compression under `--fix-strand` (gffread is single-threaded). |
 | `--longread`             | off | Pass `-L` to StringTie (PacBio Iso-Seq / ONT). |
 | `--keep-tmp`             | off | Do not delete intermediate FASTA / BAM files and b2m's GTF. |
 | `--fix-strand`           | off | With `--bam`: recover per-run library strandedness first and run StringTie on the fixed BAM. Needs `pysam`. Writes `strand_runs.tsv`. See [strand_fix.md](strand_fix.md). |
-| `--strand-run-regex RE`  | leading letters+digits | With `--fix-strand`: regex whose group 1 is the run id in a read name (e.g. `SRR123456`). |
+| `--strand-run-regex RE`  | leading letters+digits | With `--fix-strand`: regex whose group 1 is the run id in a read name (e.g. `SRR123456`). `none`: the whole BAM is one library. |
 
 ### Genomic flanks and ORF completion
 

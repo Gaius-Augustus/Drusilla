@@ -199,9 +199,11 @@ def find_dropable(
     """Return ``{dropped_tid: keeper_tid}``.
 
     Within each (contig, strand, locus) group, drop A if some other
-    isoform B in the group has A as a sub-sequence. When two isoforms
-    have identical CDS chains, the one with more exons / longer span
-    sorts first and is kept; the duplicate is dropped.
+    isoform B in the group has A as a sub-sequence. Isoforms are ranked
+    by (more exons, longer span, tid); the keeper reported for a dropped
+    isoform is the highest-ranked one that contains it. When two
+    isoforms have identical CDS chains, the higher-ranked one (smaller
+    tid on a full tie) is kept and the other is dropped.
     """
     groups: dict[tuple[str, str, str], list[str]] = defaultdict(list)
     for tid, rec in by_tid.items():
@@ -220,7 +222,11 @@ def find_dropable(
                 t,
             ),
         )
-        for i, a_tid in enumerate(tids):
+        # Visit drop candidates from the least to the most preferred so
+        # that identical chains keep the first-sorted tid; keepers are
+        # searched in preference order.
+        for i in range(len(tids) - 1, -1, -1):
+            a_tid = tids[i]
             if a_tid in drop_map:
                 continue
             for j in range(len(tids)):

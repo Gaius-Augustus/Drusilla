@@ -58,7 +58,7 @@ python scripts/build_tfrecords.py \
   --fasta   labels/<species>/transcripts_labelled.fa \
   --labels  labels/<species>/labels.npz \
   --out     tfrecords/<species>.tfrecords \
-  --chunk-len 999
+  --chunk-len 9999
 ```
 
 TFRecord schema per example:
