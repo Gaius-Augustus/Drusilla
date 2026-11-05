@@ -10,7 +10,7 @@ Shards named ``*.tfrecords.gz`` are read GZIP-compressed; both kinds may be
 mixed in one manifest.
 
 The config is a YAML with ``data``, ``model``, ``training``, and
-``checkpointing`` blocks (see configs/joint.yaml, configs/vertebrates.yaml).
+``checkpointing`` blocks (see configs/drusilla_model.yaml, configs/vertebrates.yaml).
 
 Resuming a run that was stopped by a walltime limit::
 
@@ -45,7 +45,7 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                          "ReduceLROnPlateau) are skipped.")
     ap.add_argument("--config", type=Path, required=True,
                     help="Training config YAML "
-                         "(e.g. configs/joint.yaml).")
+                         "(e.g. configs/drusilla_model.yaml).")
     ap.add_argument("--out-dir", type=Path, required=True,
                     help="Output directory for checkpoints and logs.")
     ap.add_argument("--epochs", type=int, default=None,

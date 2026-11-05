@@ -12,7 +12,9 @@ def add_args(p: argparse.ArgumentParser) -> None:
 
     sub.add_parser("list", help="List available models and their local cache status.")
 
-    p_dl = sub.add_parser("download", help="Download a model into the local cache.")
+    p_dl = sub.add_parser("download",
+                          help="Download a model into the local cache (a bundled model "
+                               "such as drusilla_model needs no download; its paths are printed).")
     p_dl.add_argument("name", help="Model name (see `drusilla models list`).")
     p_dl.add_argument("--force", action="store_true",
                       help="Re-download even if a cached copy is present.")
@@ -35,7 +37,9 @@ def _cmd_list(_args: argparse.Namespace) -> int:
     for name in sorted(manifests):
         mf = manifests[name]
         st = registry.local_status(name)
-        if st["cached"]:
+        if st.get("bundled"):
+            cache = "bundled" if st["cached"] else "bundled, broken"
+        elif st["cached"]:
             cache = "cached"
         elif st["files_present"]:
             cache = f"stale (v{st['cached_version'] or '?'})"
@@ -44,6 +48,10 @@ def _cmd_list(_args: argparse.Namespace) -> int:
         clade = mf.data.get("target_clade") or "-"
         arch = mf.data.get("architecture") or "-"
         print(f"{name:20s} v{mf.version:6s}  {cache:12s}  clade={clade}  arch={arch}")
+        if st.get("error"):
+            print(f"  {st['error']}")
+        if st.get("error"):
+            print(f"  {st['error']}")
         if mf.data.get("comment"):
             print(f"  {mf.data['comment']}")
     print()
@@ -53,6 +61,10 @@ def _cmd_list(_args: argparse.Namespace) -> int:
 
 def _cmd_download(args: argparse.Namespace) -> int:
     resolved = registry.resolve_model(args.name, force=args.force)
+    if resolved.manifest.bundled:
+        print(f"{args.name}: bundled with the package, nothing to download")
+    if resolved.manifest.bundled:
+        print(f"{args.name}: bundled with the package, nothing to download")
     print(f"weights  : {resolved.weights_path}")
     print(f"arch cfg : {resolved.arch_config_path}")
     return 0
@@ -61,7 +73,8 @@ def _cmd_download(args: argparse.Namespace) -> int:
 def _cmd_rm(args: argparse.Namespace) -> int:
     removed = registry.clear(args.name)
     if not removed:
-        print(f"{args.name}: nothing to remove")
+        why = " (bundled with the package)" if registry.load_manifest(args.name).bundled else ""
+        print(f"{args.name}: nothing to remove{why}")
     else:
         for p in removed:
             print(f"removed {p}")

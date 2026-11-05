@@ -24,12 +24,12 @@ Exactly one path chooses the model:
 
 | Flag | Meaning |
 |---|---|
-| _(default)_             | Uses the default registered model (`DEFAULT_MODEL` in `drusilla/cli/annotate.py`): `vertebrates` today, `joint` once the joint model is released. |
-| `--model NAME`          | Registered model (see `drusilla models list`). On first use, downloads the `.tar.gz` archive, verifies its SHA256, and extracts to the cache. Both weights and architecture config come from the archive — no `--config` needed. |
+| _(default)_             | Uses the default registered model (`DEFAULT_MODEL` in `drusilla/cli/annotate.py`): `drusilla_model`, whose weights ship with the package. |
+| `--model NAME`          | Registered model (see `drusilla models list`). `drusilla_model` is bundled: weights and architecture config are read from the package and the SHA256 of the weights is checked. A legacy download model is fetched as a `.tar.gz` archive on first use, verified and extracted to the cache. No `--config` needed either way. |
 | `--weights FILE`        | Local `.weights.h5`. Requires `--config FILE` alongside it (the architecture is not carried inside `.weights.h5`). |
 
 If you pass `--config` together with `--model`, the local config
-overrides the arch config that ships in the model archive. Only useful
+overrides the arch config the registry provides for the model. Only useful
 when you know exactly what you're doing.
 
 **Inference presets from the manifest.** A registered model's manifest
@@ -39,19 +39,15 @@ may carry an `annotate_defaults` block for the options
 the command line; explicit flags always win (the boolean options have
 `--no-...` forms for that). The applied presets are printed as
 `[model] inference defaults taken from the model manifest: ...`. The
-`joint` manifest presets both-strand scanning with `nonoverlap`,
+`drusilla_model` manifest presets both-strand scanning with `nonoverlap`,
 `orfs_per_tx 0` and 500 bp flanks with completion, matching its training
-labels (label policy v2); `vertebrates` and `insects` set nothing. With
+labels (label policy v2); the legacy `vertebrates` and `insects` set nothing. With
 `--weights` no manifest is involved and the built-in defaults apply.
 
-> **Currently available: `vertebrates` (default) and a preliminary
-> `insects` model.** The `joint` model for vertebrates, insects, land
-> plants, fungi, diatoms and green algae is in training and will become
-> the default. See the [Models table in the README](../README.md#models)
-> for status. To use Drusilla on a species outside the released clades
-> today, either train a model with `drusilla train` (see
-> [training.md](training.md)) or supply your own weights via
-> `--weights` / `--config`.
+> **Available models: `drusilla_model` (default, bundled) for vertebrates,
+> insects, land plants, fungi, diatoms and green algae; the legacy
+> `vertebrates` and `insects` downloads of Drusilla 0.2.** See the
+> [Models table in the README](../README.md#models).
 
 ## Output
 
@@ -119,9 +115,9 @@ because gffread extracts them as the forward genomic sequence.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--unstranded-both-strands` / `--no-unstranded-both-strands` | off (manifest may preset; `joint`: on) | Also scan the reverse complement of every strand-`.` transcript as a separate record `<tid>__rc` with a `-` strand model. Without it, minus-strand genes on unstranded (mostly single-exon) transcripts cannot be called. |
-| `--unstranded-pick {nonoverlap,longest,both}` | `longest` (manifest may preset; `joint`: `nonoverlap`) | With `--unstranded-both-strands`: `nonoverlap` pools the ORFs of both orientations, keeps them longest first and drops every ORF that shares genomic bases with a kept one (a gene called in both orientations keeps the longer call, genes on different strands of one transcript survive); `longest` keeps only the orientation with the longest ORF; `both` keeps everything. `nonoverlap` is the rule matching label policy v2, under which the joint model was trained. |
-| `--orfs-per-tx N`           | 1 (manifest may preset; `joint`: 0) | Maximum ORFs emitted per transcript, longest first. Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... and their own `gene_id`. 0 = no limit. Needed for fused transcripts carrying several genes; the joint model's labels contain every gene of a fused transcript. |
+| `--unstranded-both-strands` / `--no-unstranded-both-strands` | off (manifest may preset; `drusilla_model`: on) | Also scan the reverse complement of every strand-`.` transcript as a separate record `<tid>__rc` with a `-` strand model. Without it, minus-strand genes on unstranded (mostly single-exon) transcripts cannot be called. |
+| `--unstranded-pick {nonoverlap,longest,both}` | `longest` (manifest may preset; `drusilla_model`: `nonoverlap`) | With `--unstranded-both-strands`: `nonoverlap` pools the ORFs of both orientations, keeps them longest first and drops every ORF that shares genomic bases with a kept one (a gene called in both orientations keeps the longer call, genes on different strands of one transcript survive); `longest` keeps only the orientation with the longest ORF; `both` keeps everything. `nonoverlap` is the rule matching label policy v2, under which `drusilla_model` was trained. |
+| `--orfs-per-tx N`           | 1 (manifest may preset; `drusilla_model`: 0) | Maximum ORFs emitted per transcript, longest first. Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... and their own `gene_id`. 0 = no limit. Needed for fused transcripts carrying several genes; the training labels of `drusilla_model` contain every gene of a fused transcript. |
 
 ### Reference-free StringTie pre-filters
 
@@ -196,8 +192,8 @@ drusilla annotate \
 
 Pooled SRA BAM, recover strandedness, scan both strands of unstranded
 transcripts and complete truncated ORFs from the genome (with
-`--model joint` the last three lines are the manifest presets and can be
-dropped):
+the default `drusilla_model` the last three lines are its manifest presets and
+can be dropped):
 
 ```bash
 drusilla annotate \
@@ -210,14 +206,14 @@ drusilla annotate \
   --out-dir       drusilla_out/
 ```
 
-Joint model, but one ORF per transcript and no flanks (overriding its
+`drusilla_model`, but one ORF per transcript and no flanks (overriding its
 manifest presets):
 
 ```bash
 drusilla annotate \
   --stringtie-gtf stringtie.gtf \
   --genome        genome.fa \
-  --model joint --orfs-per-tx 1 --flank-bp 0 --flank-3p-bp 0 --no-flank-keep \
+  --orfs-per-tx 1 --flank-bp 0 --flank-3p-bp 0 --no-flank-keep \
   --out-dir       drusilla_out/
 ```
 

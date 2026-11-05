@@ -54,7 +54,9 @@ packages = ["src/drusilla"]
 "model_cfg"                  = "drusilla/_bundled/model_cfg"
 "configs/default.yaml"       = "drusilla/_bundled/configs/default.yaml"
 "configs/vertebrates.yaml"   = "drusilla/_bundled/configs/vertebrates.yaml"
-"configs/joint.yaml"         = "drusilla/_bundled/configs/joint.yaml"
+"configs/drusilla_model.yaml" = "drusilla/_bundled/configs/drusilla_model.yaml"
+# The released model's weights (28 MB) ship in the wheel as well: no download step.
+"models/drusilla_model"       = "drusilla/_bundled/models/drusilla_model"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

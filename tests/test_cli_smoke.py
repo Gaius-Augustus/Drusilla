@@ -182,6 +182,24 @@ def test_models_list_shows_all_bundled_models(capsys, tmp_path, monkeypatch):
     assert main(["models", "list"]) == 0
     out = capsys.readouterr().out
     assert "vertebrates" in out and "insects" in out
+    assert "drusilla_model" in out and "bundled" in out
+
+
+def test_default_model_is_registered_and_bundled():
+    from drusilla import registry
+    from drusilla.cli.annotate import DEFAULT_MODEL
+
+    assert DEFAULT_MODEL == "drusilla_model"
+    assert registry.load_manifest(DEFAULT_MODEL).bundled
+    assert "drusilla_model" in out and "bundled" in out
+
+
+def test_default_model_is_registered_and_bundled():
+    from drusilla import registry
+    from drusilla.cli.annotate import DEFAULT_MODEL
+
+    assert DEFAULT_MODEL == "drusilla_model"
+    assert registry.load_manifest(DEFAULT_MODEL).bundled
 
 
 def test_strand_run_regex_default_matches_module_default():

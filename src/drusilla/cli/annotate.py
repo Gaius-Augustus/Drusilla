@@ -5,9 +5,10 @@ Two input modes:
     --bam <bam>          --genome <fa>       run StringTie internally first
                                               (optionally after --fix-strand)
 
-Model weights are resolved via the registry: pass ``--model <name>`` to
-download and use a released model, or ``--weights <path>`` to load a
-locally-trained checkpoint.
+Model weights are resolved via the registry: the bundled ``drusilla_model``
+is used by default, ``--model <name>`` selects another registered model
+(the legacy per-clade models are downloaded on first use), and
+``--weights <path>`` loads a locally-trained checkpoint.
 
 Default output (in --out-dir):
     orfs.gtf        PRIMARY. Genomic-coordinate GTF of predicted CDS lines
@@ -63,8 +64,8 @@ def add_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--genome", type=Path, required=True,
                     help="Genome FASTA matching the GTF/BAM contig names.")
 
-    # Model selection: either a registered name (auto-download) or a
-    # local weights file (advanced / custom-trained).
+    # Model selection: a registered name (bundled, or downloaded for the
+    # legacy models) or a local weights file (advanced / custom-trained).
     mdl = ap.add_mutually_exclusive_group()
     mdl.add_argument("--model", type=str, default=None,
                      help="Registered model name (see `drusilla models list`). "
@@ -141,21 +142,21 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                          "record '<tid>__rc' with a '-' strand model. "
                          "Without this, minus-strand genes on unstranded "
                          "(mostly single-exon) transcripts cannot be called. "
-                         "Built-in default off; the joint model's manifest "
+                         "Built-in default off; the drusilla_model manifest "
                          "turns it on (--no-unstranded-both-strands to override).")
     ap.add_argument("--unstranded-pick", choices=("nonoverlap", "longest", "both"),
                     default=None,
                     help="With --unstranded-both-strands: 'nonoverlap' keeps "
                          "the ORFs of both orientations, longest first, "
                          "dropping any ORF that overlaps a kept one on the "
-                         "genome (matches label policy v2 of the joint model); "
+                         "genome (matches label policy v2 of drusilla_model); "
                          "'longest' keeps only the orientation with the "
                          "longest ORF (built-in default); 'both' keeps "
                          "everything.")
     ap.add_argument("--orfs-per-tx", type=int, default=None,
                     help="Maximum number of ORFs emitted per transcript, "
                          "longest first (built-in default 1; 0 = no limit, the "
-                         "joint model's manifest default, as its training "
+                         "drusilla_model manifest default, as its training "
                          "labels hold every gene of a fused transcript). Extra "
                          "ORFs get transcript_id '<tid>.orf2', '<tid>.orf3', ...")
 
@@ -450,10 +451,10 @@ def _make_predict_func(
     return predict_func
 
 
-# Model used when neither --model nor --weights is given. Switch to the joint
-# multi-clade model ("joint") when its manifest model_cfg/joint.yaml is
-# released; the per-clade models stay available by name.
-DEFAULT_MODEL = "vertebrates"
+# Model used when neither --model nor --weights is given: the bundled
+# multi-clade model (model_cfg/drusilla_model.yaml, weights in the package).
+# The legacy per-clade models stay available by name (downloaded on use).
+DEFAULT_MODEL = "drusilla_model"
 
 # Inference options a model manifest may preset in its ``annotate_defaults``
 # block (keys = argparse dests). Precedence: command line > manifest > these
@@ -524,9 +525,9 @@ def _resolve_model_paths(args: argparse.Namespace) -> tuple[Path, Path]:
       * ``--weights FILE`` + ``--config FILE`` — local override (advanced use).
         Both are required together; the arch config travels with released
         models, so a local checkpoint needs its own.
-      * ``--model NAME`` (or the default ``vertebrates``) — resolve via the
-        registry. Downloads and extracts the archive on first use; returns
-        the paths to the extracted ``weights.h5`` and ``arch.yaml``.
+      * ``--model NAME`` (or the default ``drusilla_model``): resolve via the
+        registry. A bundled model is read from the package; a legacy model
+        is downloaded and extracted on first use.
     """
     from .. import registry
 
@@ -540,8 +541,8 @@ def _resolve_model_paths(args: argparse.Namespace) -> tuple[Path, Path]:
 
     name = args.model or DEFAULT_MODEL
     resolved = registry.resolve_model(name)
-    # --config is not needed for a registered model (arch.yaml ships in the
-    # archive). Warn if user passed both, use the local one.
+    # --config is not needed for a registered model (the registry provides
+    # its arch config). Warn if user passed both, use the local one.
     if args.config is not None:
         print(
             f"note: --config {args.config} overrides the arch config that "

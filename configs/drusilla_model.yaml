@@ -1,4 +1,4 @@
-# Training config of the joint (multi-clade) Drusilla model.
+# Training config of the Drusilla model (drusilla_model): one CNN-BiLSTM for all clades.
 #
 # One CNN-BiLSTM trained on the pooled TFRecords of 425 species from six
 # clades (vertebrates, insects, embryophyta, fungi, diatoms, chlorophyta) with

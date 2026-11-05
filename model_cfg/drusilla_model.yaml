@@ -1,37 +1,41 @@
-# Drusilla model manifest — joint (multi-clade) model. DRAFT.
+# Drusilla model manifest: the released Drusilla model (one model for all clades).
 #
-# Rename to joint.yaml (and fill the TODO fields) when the weights are
-# released; the registry only reads model_cfg/*.yaml, so this draft is not
-# visible to `drusilla models list`. Release steps: model_cfg/README.md.
+# The weights ship inside the repository and the wheel. weights_path and arch_path
+# are relative to the directory that holds model_cfg/ (the repository root in a
+# checkout, drusilla/_bundled/ in an installed wheel); nothing is downloaded.
+# weights_sha256 is the SHA256 of the weights file and is checked on every use.
 #
-# Archive layout (after tar -xzf):
-#   joint/
-#     model.weights.h5   — chosen epoch of results/models/cnn_lstm_joint_run001
-#     arch.yaml          — configs/joint.yaml (architecture + data block)
-#
-# Field reference: see vertebrates.yaml. New in this manifest:
-#   label_policy        the label policy the training data was built with
-#   annotate_defaults   inference options preset for `drusilla annotate --model joint`
-#                       (command-line values win; see docs/annotate.md)
+# Field reference: see vertebrates.yaml (a downloaded, archive-based manifest).
+# Specific to this manifest:
+#   weights_path / arch_path   bundled weights file + architecture config
+#   label_policy               the label policy the training data was built with
+#   annotate_defaults          inference options preset for `drusilla annotate`
+#                              (command-line values win; see docs/annotate.md)
 
-name: joint
+name: drusilla_model
 version: "1.0"
 target_clade: "Eukaryota: vertebrates, insects, embryophyta, fungi, diatoms, chlorophyta"
 ncbi_tax_id: 2759
-weights_url: "TODO https://bioinf.uni-greifswald.de/bioinf/drusilla/joint.tar.gz"
-weights_sha256: "TODO sha256sum joint.tar.gz"
-# TODO: epoch_NN.weights.h5 (best val_loss, see train_log.tsv) of results/models/cnn_lstm_joint_run001
+weights_path: models/drusilla_model/model.weights.h5
+arch_path: configs/drusilla_model.yaml
+weights_sha256: "8adae611a4e3c3a556db58dc167e6d443f530c048b75d89e8ad76bc8c066b9f0"   # of model.weights.h5
+# model.weights.h5 = epoch_73.weights.h5 of training run cnn_lstm_joint_run001 (tiberius_orf_finder,
+# md5 e1cf5847b168831594083198f81785be): the last epoch of the chain (73 epochs, two 12 h jobs, LR
+# halved six times to 1.6e-6; val_loss flat since epoch 42; best of epochs 42/59/61/73 on the
+# one-species-per-clade test benchmark, decided 2026-11-04).
 training_run: "cnn_lstm_joint_run001"
 drusilla_version: "0.3.0"
 default_chunk_len: 9999
-date: "TODO YYYY-MM-DD"
+date: "2026-11-04"
 architecture: "cnn_lstm"
 label_policy: "v2"   # both orientations of unstranded transcripts, every non-overlapping CDS per transcript,
                      # RefSeq partial=true / pseudo=true CDS treated as incomplete (docs/data_prep.md)
 comment: >-
-  One model for all clades, trained on the pooled label-policy-v2 TFRecords of
-  425 species (68 vertebrates, 88 insects, 32 embryophyta, 213 fungi, 18 diatoms, 6 chlorophyta) with configs/joint.yaml; validated on Ornithorhynchus anatinus, Petromyzon marinus, Drosophila ananassae, Drosophila virilis, Tenebrio molitor, Populus trichocarpa.
-  Replaces the per-clade models vertebrates / insects as the default.
+  The Drusilla model: one CNN-BiLSTM for all clades, trained on the pooled label-policy-v2 TFRecords of
+  425 species (68 vertebrates, 88 insects, 32 embryophyta, 213 fungi, 18 diatoms, 6 chlorophyta) with
+  configs/drusilla_model.yaml; validated on Ornithorhynchus anatinus, Petromyzon marinus, Drosophila
+  ananassae, Drosophila virilis, Tenebrio molitor, Populus trichocarpa. Default model since Drusilla 0.3;
+  replaces the per-clade models vertebrates / insects.
 
 # Inference options that match the training labels (policy v2) and the
 # genomic-flank ORF completion used in the test benchmarks of all clades.

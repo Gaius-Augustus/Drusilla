@@ -38,7 +38,7 @@ python scripts/label_transcripts.py \
 
 ### Label policy v2
 
-This is the policy the joint model was trained with (Drusilla >= 0.3;
+This is the policy `drusilla_model` was trained with (Drusilla >= 0.3;
 the per-clade models were trained with the earlier policy, see Notes):
 
 - **Unstranded transcripts in both orientations.** A StringTie transcript
@@ -89,7 +89,7 @@ python scripts/build_tfrecords.py \
 
 An output name ending in `.gz` is written GZIP-compressed
 (`--compression {auto,none,gzip}` overrides the suffix rule). The one-hot
-payload shrinks about 45x; the 425 shards of the joint model take 21.5 GB
+payload shrinks about 45x; the 425 shards of `drusilla_model` take 21.5 GB
 instead of about 1 TB, and the loader reads both kinds transparently.
 
 TFRecord schema per example:
@@ -120,18 +120,18 @@ manifest; species must not appear in both. With hundreds of shards set
 `data.cycle_length: 0` in the config so every shard is read side by side
 (see [training.md](training.md)).
 
-## Reproducing the joint model
+## Reproducing the Drusilla model
 
-The joint model was trained on 425 species of six clades (68 vertebrates,
+`drusilla_model` was trained on 425 species of six clades (68 vertebrates,
 88 insects, 32 land plants, 213 fungi, 18 diatoms, 6 green algae; the list
-is in [model_cfg/joint.yaml.draft](../model_cfg/joint.yaml.draft)) with
+is in [model_cfg/drusilla_model.yaml](../model_cfg/drusilla_model.yaml)) with
 label policy v2 and gzip shards, validated on 6 held-out species of three
 clades, using the full Nextflow pipeline in
 [tiberius_orf_finder](https://github.com/Gaius-Augustus/tiberius_orf_finder)
 (genome and RNA-seq retrieval, StringTie, labelling, chunking). That
 pipeline runs on the group's HPC cluster and is not designed for outside
 reproduction; the resulting TFRecord shards are what `drusilla train`
-consumed with [configs/joint.yaml](../configs/joint.yaml). For a dataset
+consumed with [configs/drusilla_model.yaml](../configs/drusilla_model.yaml). For a dataset
 of your own, follow steps 1-3 above per species and combine the
 manifests.
 
