@@ -1,7 +1,8 @@
 # Drusilla
 
 Deep-learning ORF annotator for RNA-seq assembled transcripts. Given a
-StringTie GTF (or a sorted RNA-seq BAM) plus the corresponding genome,
+GTF of assembled transcripts (StringTie or any other assembler; or a
+sorted RNA-seq BAM, on which StringTie is run) plus the corresponding genome,
 Drusilla predicts the coding region of every assembled transcript and
 writes a genomic GTF of CDS lines.
 
@@ -66,7 +67,7 @@ singularity run --nv \
   -B $PWD:/work \
   -B $HOME/.cache/drusilla:/data/drusilla_cache \
   drusilla.sif annotate \
-    --stringtie-gtf /work/stringtie.gtf \
+    --assembly-gtf  /work/stringtie.gtf \
     --genome        /work/genome.fa \
     --out-dir       /work/results
 ```
@@ -87,7 +88,7 @@ docker run --rm --gpus all \
   -v $PWD:/work \
   -v $HOME/.cache/drusilla:/data/drusilla_cache \
   larsgabriel23/drusilla:latest annotate \
-    --stringtie-gtf /work/stringtie.gtf \
+    --assembly-gtf  /work/stringtie.gtf \
     --genome        /work/genome.fa \
     --out-dir       /work/results
 ```
@@ -96,12 +97,13 @@ docker run --rm --gpus all \
 
 ## Quick start
 
-Annotate a transcriptome from an existing StringTie GTF (the bundled
-`drusilla_model` is used, nothing is downloaded):
+Annotate a transcriptome from an existing assembly GTF, from StringTie or
+any other assembler (the bundled `drusilla_model` is used, nothing is
+downloaded):
 
 ```bash
 drusilla annotate \
-  --stringtie-gtf path/to/stringtie.gtf \
+  --assembly-gtf  path/to/stringtie.gtf \
   --genome        path/to/genome.fa \
   --out-dir       results/
 ```

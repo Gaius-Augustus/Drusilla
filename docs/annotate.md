@@ -1,6 +1,7 @@
 # `drusilla annotate` — reference
 
-End-to-end ORF annotation from a StringTie GTF or a sorted RNA-seq BAM.
+End-to-end ORF annotation from a transcript assembly GTF (StringTie or any
+other assembler) or a sorted RNA-seq BAM.
 
 ## Input modes
 
@@ -8,7 +9,7 @@ Exactly one is required:
 
 | Flag | Meaning |
 |---|---|
-| `--stringtie-gtf FILE` | Skip StringTie; use this pre-computed GTF. |
+| `--assembly-gtf FILE` | GTF of assembled transcripts: `exon` lines carrying `transcript_id` and `gene_id`, from StringTie or any other assembler. StringTie is not run. The former spelling `--stringtie-gtf` is still accepted (hidden; prints a deprecation note). |
 | `--bam FILE`           | Run StringTie internally on this sorted BAM. |
 
 Both modes also require `--genome FILE` (the genome FASTA whose contig
@@ -16,7 +17,7 @@ names match the GTF/BAM).
 
 If you already have a spliced transcript FASTA (e.g. from a previous
 `gffread` run), you can pass `--transcripts-fa FILE` to skip that step
-too. The FASTA record IDs must equal the StringTie `transcript_id`s.
+too. The FASTA record IDs must equal the GTF `transcript_id`s.
 
 ## Model selection
 
@@ -110,7 +111,7 @@ can be completed from the genome.
 
 ### Unstranded transcripts and several ORFs per transcript
 
-StringTie transcripts with strand `.` are modelled on the forward strand,
+Transcripts with strand `.` are modelled on the forward strand,
 because gffread extracts them as the forward genomic sequence.
 
 | Flag | Default | Meaning |
@@ -119,15 +120,18 @@ because gffread extracts them as the forward genomic sequence.
 | `--unstranded-pick {nonoverlap,longest,both}` | `longest` (manifest may preset; `drusilla_model`: `nonoverlap`) | With `--unstranded-both-strands`: `nonoverlap` pools the ORFs of both orientations, keeps them longest first and drops every ORF that shares genomic bases with a kept one (a gene called in both orientations keeps the longer call, genes on different strands of one transcript survive); `longest` keeps only the orientation with the longest ORF; `both` keeps everything. `nonoverlap` is the rule matching label policy v2, under which `drusilla_model` was trained. |
 | `--orfs-per-tx N`           | 1 (manifest may preset; `drusilla_model`: 0) | Maximum ORFs emitted per transcript, longest first. Extra ORFs get ids `<tid>.orf2`, `<tid>.orf3`, ... and their own `gene_id`. 0 = no limit. Needed for fused transcripts carrying several genes; the training labels of `drusilla_model` contain every gene of a fused transcript. |
 
-### Reference-free StringTie pre-filters
+### Reference-free assembly pre-filters
 
 Approximate the "clean-transcript" curation the training pipeline does
-with a reference annotation.
+with a reference annotation. `--min-cov` and `--min-tpm` read the
+StringTie attributes `cov` and `TPM`; a transcript without the attribute
+counts as 0 and is dropped, so use them on a GTF from another assembler
+only if it writes these attributes.
 
 | Flag | Meaning |
 |---|---|
-| `--min-cov FLOAT`        | Drop StringTie transcripts with `cov` below this. |
-| `--min-tpm FLOAT`        | Drop StringTie transcripts with `TPM` below this. |
+| `--min-cov FLOAT`        | Drop transcripts whose `cov` attribute is below this. |
+| `--min-tpm FLOAT`        | Drop transcripts whose `TPM` attribute is below this. |
 | `--drop-unstranded`      | Drop transcripts with strand `.`. |
 | `--drop-single-exon`     | Drop single-exon transcripts (often intronic noise). |
 
@@ -173,7 +177,7 @@ Short-read short-assembly on a single sample, defaults:
 
 ```bash
 drusilla annotate \
-  --stringtie-gtf stringtie.gtf \
+  --assembly-gtf  stringtie.gtf \
   --genome        GRCh38.fa \
   --out-dir       drusilla_out/
 ```
@@ -211,7 +215,7 @@ manifest presets):
 
 ```bash
 drusilla annotate \
-  --stringtie-gtf stringtie.gtf \
+  --assembly-gtf  stringtie.gtf \
   --genome        genome.fa \
   --orfs-per-tx 1 --flank-bp 0 --flank-3p-bp 0 --no-flank-keep \
   --out-dir       drusilla_out/
@@ -221,7 +225,7 @@ Rescue 3'-truncated ORFs into a second GTF:
 
 ```bash
 drusilla annotate \
-  --stringtie-gtf stringtie.gtf \
+  --assembly-gtf  stringtie.gtf \
   --genome        GRCh38.fa \
   --partial-out   drusilla_out/orfs.partial.gtf \
   --out-dir       drusilla_out/

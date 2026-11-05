@@ -1,7 +1,9 @@
-"""`drusilla annotate`: end-to-end ORF annotation from a StringTie GTF or BAM.
+"""`drusilla annotate`: end-to-end ORF annotation from an assembly GTF or BAM.
 
 Two input modes:
-    --stringtie-gtf <gtf> --genome <fa>      StringTie has already been run
+    --assembly-gtf <gtf> --genome <fa>       transcript assembly GTF (StringTie
+                                              or any assembler writing exon lines
+                                              with transcript_id / gene_id)
     --bam <bam>          --genome <fa>       run StringTie internally first
                                               (optionally after --fix-strand)
 
@@ -16,7 +18,7 @@ Default output (in --out-dir):
                     subsequence-isoform collapse applied.
     orfs_local.gtf  Same predictions in transcript (local) coordinates:
                     one CDS line per predicted ORF, contig column holds
-                    the StringTie transcript_id (``<tid>__rc`` for the
+                    the assembler's transcript_id (``<tid>__rc`` for the
                     reverse-complement copy of an unstranded transcript).
     orfs.log        b2m annotation log.
 
@@ -45,6 +47,7 @@ import argparse
 import importlib.util
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Callable
 
@@ -53,10 +56,26 @@ from ..data import strand_fix_bam as _sfb
 os.environ.setdefault("TF_GPU_ALLOCATOR", "cuda_malloc_async")
 
 
+class _DeprecatedAlias(argparse.Action):
+    """Store like a plain option but point the user at the new spelling."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        new = "--" + self.dest.replace("_", "-")
+        print(f"note: {option_string} is deprecated, use {new}",
+              file=sys.stderr, flush=True)
+        setattr(namespace, self.dest, values)
+
+
 def add_args(ap: argparse.ArgumentParser) -> None:
     src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument("--stringtie-gtf", type=Path,
-                     help="StringTie GTF (skip running StringTie).")
+    src.add_argument("--assembly-gtf", type=Path, dest="assembly_gtf",
+                     help="GTF of assembled transcripts: exon lines with "
+                          "transcript_id and gene_id attributes, from StringTie "
+                          "or any other assembler. StringTie is not run.")
+    # Former spelling: hidden from --help, still accepted (Paludamentum
+    # passes it) and warns on stderr.
+    src.add_argument("--stringtie-gtf", type=Path, dest="assembly_gtf",
+                     action=_DeprecatedAlias, help=argparse.SUPPRESS)
     src.add_argument("--bam", type=Path,
                      help="Sorted alignment BAM (run StringTie internally).")
     ap.add_argument("--transcripts-fa", type=Path, default=None,
@@ -178,15 +197,17 @@ def add_args(ap: argparse.ArgumentParser) -> None:
                     help="Do not delete intermediate FASTA / BAM files and "
                          "b2m's own GTF in --out-dir.")
 
-    # Reference-free StringTie pre-filters.
+    # Reference-free assembly pre-filters (cov / TPM are StringTie attributes).
     ap.add_argument("--min-cov", type=float, default=None,
-                    help="Drop StringTie transcripts with cov < X.")
+                    help="Drop transcripts whose cov attribute (StringTie) "
+                         "is < X; a transcript without cov counts as 0.")
     ap.add_argument("--min-tpm", type=float, default=None,
-                    help="Drop StringTie transcripts with TPM < X.")
+                    help="Drop transcripts whose TPM attribute (StringTie) "
+                         "is < X; a transcript without TPM counts as 0.")
     ap.add_argument("--drop-unstranded", action="store_true",
-                    help="Drop StringTie transcripts with strand '.'.")
+                    help="Drop transcripts with strand '.'.")
     ap.add_argument("--drop-single-exon", action="store_true",
-                    help="Drop single-exon StringTie transcripts.")
+                    help="Drop single-exon transcripts.")
 
     # Post-decode filters.
     ap.add_argument("--min-coding-length", type=int, default=200,
@@ -288,7 +309,7 @@ def _parse_tx_to_gene(gtf_path: Path) -> dict[str, str]:
     return out
 
 
-def _filter_stringtie_gtf(
+def _filter_assembly_gtf(
     in_path: Path,
     out_path: Path,
     min_cov: float | None,
@@ -296,7 +317,8 @@ def _filter_stringtie_gtf(
     drop_unstranded: bool,
     drop_single_exon: bool,
 ) -> tuple[int, int]:
-    """Filter a StringTie GTF by per-transcript metadata. Returns (kept, dropped)."""
+    """Filter an assembly GTF by StringTie-style per-transcript attributes
+    (cov, TPM), strand and exon count. Returns (kept, dropped)."""
     from collections import defaultdict
 
     tx_strand: dict[str, str] = {}
@@ -617,7 +639,7 @@ def run(args: argparse.Namespace) -> int:
     print(f"Workdir: {args.out_dir}", flush=True)
     tmp_files: list[Path] = []
 
-    # 1. resolve StringTie GTF
+    # 1. resolve the transcript assembly GTF
     if args.bam is not None:
         bam = args.bam
         if args.fix_strand:
@@ -638,43 +660,43 @@ def run(args: argparse.Namespace) -> int:
             )
             bam = sfix_bam
             tmp_files.append(sfix_bam)
-        stringtie_gtf = args.out_dir / "stringtie.gtf"
+        assembly_gtf = args.out_dir / "stringtie.gtf"
         print(f"Running StringTie on {bam} (longread={args.longread})", flush=True)
         st_cmd = ["stringtie", str(bam),
-                  "-o", str(stringtie_gtf),
+                  "-o", str(assembly_gtf),
                   "-p", str(args.threads)]
         if args.longread:
             st_cmd.append("-L")
         _run_cmd(st_cmd)
     else:
-        stringtie_gtf = args.stringtie_gtf
+        assembly_gtf = args.assembly_gtf
 
-    # 1b. optional reference-free filtering of the StringTie GTF
+    # 1b. optional reference-free filtering of the assembly GTF
     if (args.min_cov is not None or args.min_tpm is not None
             or args.drop_unstranded or args.drop_single_exon):
         filtered_gtf = args.out_dir / "stringtie.filtered.gtf"
-        kept, dropped = _filter_stringtie_gtf(
-            stringtie_gtf, filtered_gtf,
+        kept, dropped = _filter_assembly_gtf(
+            assembly_gtf, filtered_gtf,
             min_cov=args.min_cov,
             min_tpm=args.min_tpm,
             drop_unstranded=args.drop_unstranded,
             drop_single_exon=args.drop_single_exon,
         )
         print(
-            f"Filtered StringTie GTF (min_cov={args.min_cov}, "
+            f"Filtered assembly GTF (min_cov={args.min_cov}, "
             f"min_tpm={args.min_tpm}, drop_unstranded={args.drop_unstranded}, "
             f"drop_single_exon={args.drop_single_exon}): "
             f"kept {kept}, dropped {dropped} -> {filtered_gtf}",
             flush=True,
         )
-        stringtie_gtf = filtered_gtf
+        assembly_gtf = filtered_gtf
 
     # 2. extract transcripts FASTA via gffread
     if args.transcripts_fa is None:
         transcripts_fa = args.out_dir / "transcripts.fa"
         print(f"Extracting transcripts -> {transcripts_fa}", flush=True)
         _run_cmd(["gffread", "-w", str(transcripts_fa),
-                  "-g", str(args.genome), str(stringtie_gtf)])
+                  "-g", str(args.genome), str(assembly_gtf)])
         tmp_files.append(transcripts_fa)
     else:
         transcripts_fa = args.transcripts_fa
@@ -682,7 +704,7 @@ def run(args: argparse.Namespace) -> int:
     # 2a. exon structure for tx-coord -> genomic-coord projection. Strand
     # '.' transcripts are normalised to '+' here because gffread emits
     # them as the forward genomic sequence.
-    transcripts = parse_stringtie_gtf(stringtie_gtf)
+    transcripts = parse_stringtie_gtf(assembly_gtf)
     n_unstranded = sum(1 for t in transcripts.values() if t.unstranded)
     print(f"  transcripts (exon structure): {len(transcripts)} "
           f"({n_unstranded} unstranded)", flush=True)
@@ -812,7 +834,7 @@ def run(args: argparse.Namespace) -> int:
     out_log = args.out_dir / "orfs.log"
 
     tx_to_gene: dict[str, str] = (
-        _parse_tx_to_gene(stringtie_gtf) if args.single_isoform else {}
+        _parse_tx_to_gene(assembly_gtf) if args.single_isoform else {}
     )
 
     # record name (tid or tid__rc) -> list of ORF dicts:
