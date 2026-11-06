@@ -60,22 +60,22 @@ singularity build drusilla.sif docker://gaiusaugustus/drusilla:latest
 apptainer build drusilla.sif docker://gaiusaugustus/drusilla:latest
 ```
 
-Run it (bind-mount your working dir and a cache dir for model weights):
+Run it (bind-mount your working dir):
 
 ```bash
 singularity run --nv \
   -B $PWD:/work \
-  -B $HOME/.cache/drusilla:/data/drusilla_cache \
   drusilla.sif annotate \
     --assembly-gtf  /work/stringtie.gtf \
     --genome        /work/genome.fa \
     --out-dir       /work/results
 ```
 
-`--nv` is required for GPU access. The bundled `drusilla_model` needs no
-download; the second bind mount only matters for the legacy per-clade
-models, whose archives are downloaded into `DRUSILLA_CACHE_DIR`
-(`/data/drusilla_cache` inside the image).
+`--nv` is required for GPU access. The bundled `drusilla_model` is part
+of the image, so nothing is downloaded. Only the legacy per-clade models
+(`--model vertebrates` / `insects`) are downloaded on first use, into
+`~/.cache/drusilla` (or `DRUSILLA_CACHE_DIR`); Singularity binds `$HOME`
+by default, so that download persists across runs.
 
 On clusters that block direct DockerHub pulls from compute nodes, build
 the `.sif` once on a login node (or a workstation) and copy it to the
@@ -86,7 +86,6 @@ cluster.
 ```bash
 docker run --rm --gpus all \
   -v $PWD:/work \
-  -v $HOME/.cache/drusilla:/data/drusilla_cache \
   gaiusaugustus/drusilla:latest annotate \
     --assembly-gtf  /work/stringtie.gtf \
     --genome        /work/genome.fa \

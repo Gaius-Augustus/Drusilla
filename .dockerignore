@@ -1,0 +1,10 @@
+# Only what the wheel build needs goes into the image (see docker/Dockerfile).
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!src
+!model_cfg
+!configs
+!models
+**/__pycache__
