@@ -38,7 +38,7 @@ Optional Python dependency: `pysam`, needed only for `--fix-strand` and
 `[gpu]` and of the container).
 
 A Singularity image bundling all three is published on Docker Hub as
-[`larsgabriel23/drusilla`](https://hub.docker.com/r/larsgabriel23/drusilla).
+[`gaiusaugustus/drusilla`](https://hub.docker.com/r/gaiusaugustus/drusilla).
 See [Container](#container) below.
 
 ---
@@ -46,7 +46,7 @@ See [Container](#container) below.
 ## Container
 
 A prebuilt image is available at
-`docker://larsgabriel23/drusilla:latest`. It is based on the NVIDIA NGC
+`docker://gaiusaugustus/drusilla:latest`. It is based on the NVIDIA NGC
 TensorFlow image (`nvcr.io/nvidia/tensorflow:25.02-tf2-py3`) and bundles
 Drusilla, `gffread`, and `stringtie`.
 
@@ -55,9 +55,9 @@ Drusilla, `gffread`, and `stringtie`.
 Build a local `.sif` from the Docker Hub image:
 
 ```bash
-singularity build drusilla.sif docker://larsgabriel23/drusilla:latest
+singularity build drusilla.sif docker://gaiusaugustus/drusilla:latest
 # or, with Apptainer:
-apptainer build drusilla.sif docker://larsgabriel23/drusilla:latest
+apptainer build drusilla.sif docker://gaiusaugustus/drusilla:latest
 ```
 
 Run it (bind-mount your working dir and a cache dir for model weights):
@@ -87,7 +87,7 @@ cluster.
 docker run --rm --gpus all \
   -v $PWD:/work \
   -v $HOME/.cache/drusilla:/data/drusilla_cache \
-  larsgabriel23/drusilla:latest annotate \
+  gaiusaugustus/drusilla:latest annotate \
     --assembly-gtf  /work/stringtie.gtf \
     --genome        /work/genome.fa \
     --out-dir       /work/results
@@ -102,7 +102,7 @@ the OCI label `org.opencontainers.image.revision`), tags it
 `v<version>` (from `pyproject.toml`) and `latest`, and pushes both:
 
 ```bash
-docker/build_push.sh                 # build + push larsgabriel23/drusilla
+docker/build_push.sh                 # build + push gaiusaugustus/drusilla
 PUSH=0 docker/build_push.sh          # build only
 IMAGE=gaiusaugustus/drusilla docker/build_push.sh
 ```

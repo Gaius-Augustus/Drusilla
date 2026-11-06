@@ -21,7 +21,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 DOCKER=${DOCKER:-docker}
-IMAGE=${IMAGE:-larsgabriel23/drusilla}
+IMAGE=${IMAGE:-gaiusaugustus/drusilla}
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
 TAG=${TAG:-v$VERSION}
 PUSH=${PUSH:-1}
