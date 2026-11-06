@@ -1,8 +1,8 @@
 # Drusilla: deep-learning ORF annotator for RNA-seq assembled transcripts.
 #
 # Includes: Drusilla with the bundled drusilla_model (no download at build or
-# run time), gffread, StringTie, pysam (strand-fix-bam) and lightgbm /
-# scikit-learn / pyfaidx for the LightGBM filter of Paludamentum's Drusilla flow.
+# run time), gffread, StringTie and pysam (strand-fix-bam). Paludamentum runs
+# its Drusilla steps (ORF annotation, subsequence collapse, strand fix) in it.
 #
 # The image is built from the checked-out source tree, not from a git clone,
 # so it contains exactly the commit you build from. Build context is the
@@ -18,9 +18,6 @@
 #   singularity run --nv -B $PWD:/work drusilla.sif annotate \
 #       --assembly-gtf /work/stringtie.gtf --genome /work/genome.fa \
 #       --out-dir /work/results
-#
-# The TensorFlow / Keras handling follows docker/drusilla/Dockerfile of
-# Paludamentum, whose image runs the same code.
 
 # The NGC TensorFlow build is the only one that runs on Blackwell GPUs (sm_120).
 FROM nvcr.io/nvidia/tensorflow:25.02-tf2-py3
@@ -47,9 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # and-cuda extra installs PyPI CUDA wheels on top of the NGC stack. So the
 # TF-dependent packages are installed without dependencies and the rest
 # explicitly: numpy / pydantic (bricks2marble, hidten), pyyaml / pyfaidx /
-# pysam (Drusilla), biopython / pandas, and for the LightGBM filter of
-# Paludamentum's Drusilla flow lightgbm with scikit-learn (the model is a
-# pickled LGBMClassifier).
+# pysam (Drusilla), biopython / pandas (Drusilla's [gpu] extra).
 RUN python3 -m pip install --no-cache-dir --no-deps bricks2marble hidten && \
     python3 -m pip install --no-cache-dir \
         numpy \
@@ -58,9 +53,7 @@ RUN python3 -m pip install --no-cache-dir --no-deps bricks2marble hidten && \
         pyfaidx \
         pysam \
         biopython \
-        pandas \
-        lightgbm \
-        scikit-learn
+        pandas
 
 # Drusilla from the build context. The wheel build (hatchling force-include in
 # pyproject.toml) needs model_cfg/, configs/ and models/ next to src/, so the
@@ -94,7 +87,7 @@ sys.exit(f'NGC TensorFlow stack modified: tensorflow=={tf}, added/changed: {adde
     drusilla strand-fix-bam --help > /dev/null && \
     drusilla models path drusilla_model && \
     python3 -c "from drusilla.hmm.annotation_hmm import OrfAnnotationHMM" && \
-    python3 -c "import pysam, pyfaidx, lightgbm, sklearn, Bio, pandas, yaml, pydantic" && \
+    python3 -c "import pysam, pyfaidx, Bio, pandas, yaml, pydantic" && \
     for b in gffread stringtie; do \
         command -v "$b" > /dev/null || { echo "missing: $b"; exit 1; }; \
     done
