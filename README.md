@@ -93,6 +93,23 @@ docker run --rm --gpus all \
     --out-dir       /work/results
 ```
 
+### Building the image
+
+[docker/build_push.sh](docker/build_push.sh) builds
+[docker/Dockerfile](docker/Dockerfile) from the checked-out source tree,
+so the image contains exactly the commit it was built from (recorded in
+the OCI label `org.opencontainers.image.revision`), tags it
+`v<version>` (from `pyproject.toml`) and `latest`, and pushes both:
+
+```bash
+docker/build_push.sh                 # build + push larsgabriel23/drusilla
+PUSH=0 docker/build_push.sh          # build only
+IMAGE=gaiusaugustus/drusilla docker/build_push.sh
+```
+
+It refuses a dirty working tree (`ALLOW_DIRTY=1` overrides) and takes
+`DOCKER` (e.g. `sudo docker`) and `TAG` from the environment.
+
 ---
 
 ## Quick start
