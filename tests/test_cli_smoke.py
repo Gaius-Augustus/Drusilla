@@ -42,7 +42,7 @@ def test_models_list_runs(capsys, tmp_path, monkeypatch):
     rc = main(["models", "list"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "vertebrates" in out
+    assert "drusilla_model" in out
 
 
 def test_missing_required_args_fails():
@@ -181,7 +181,7 @@ def test_models_list_shows_all_bundled_models(capsys, tmp_path, monkeypatch):
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path))
     assert main(["models", "list"]) == 0
     out = capsys.readouterr().out
-    assert "vertebrates" in out and "insects" in out
+    assert "insects" in out
     assert "drusilla_model" in out and "bundled" in out
 
 

@@ -3,8 +3,8 @@
 # One CNN-BiLSTM trained on the pooled TFRecords of 425 species from six
 # clades (vertebrates, insects, embryophyta, fungi, diatoms, chlorophyta) with
 # label policy v2 (see docs/data_prep.md), validated on 6 held-out species of
-# three clades. Model and optimiser settings are those of
-# configs/vertebrates.yaml; only the data pipeline differs:
+# three clades. Model and optimiser settings are those of the per-clade
+# models of Drusilla 0.2; only the data pipeline differs:
 #   * cycle_length 0 interleaves every shard, so all species reach the
 #     shuffle buffer (the default of 32 open files would cycle through a
 #     few species at a time);

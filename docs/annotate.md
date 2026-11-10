@@ -42,12 +42,12 @@ the command line; explicit flags always win (the boolean options have
 `[model] inference defaults taken from the model manifest: ...`. The
 `drusilla_model` manifest presets both-strand scanning with `nonoverlap`,
 `orfs_per_tx 0` and 500 bp flanks with completion, matching its training
-labels (label policy v2); the legacy `vertebrates` and `insects` set nothing. With
+labels (label policy v2); the legacy `insects` sets nothing. With
 `--weights` no manifest is involved and the built-in defaults apply.
 
 > **Available models: `drusilla_model` (default, bundled) for vertebrates,
 > insects, land plants, fungi, diatoms and green algae; the legacy
-> `vertebrates` and `insects` downloads of Drusilla 0.2.** See the
+> `insects` download of Drusilla 0.2.** See the
 > [Models table in the README](../README.md#models).
 
 ## Output

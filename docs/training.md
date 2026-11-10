@@ -19,9 +19,7 @@ and a config, run `drusilla train`. See
    there is no `best.weights.h5`, no ReduceLROnPlateau and no early
    stopping). Species must not overlap with training.
 3. **A YAML config** — [configs/drusilla_model.yaml](../configs/drusilla_model.yaml) is the
-   configuration of `drusilla_model`, [configs/vertebrates.yaml](../configs/vertebrates.yaml)
-   that of the per-clade models (identical model and optimiser, smaller
-   data pipeline).
+   configuration of `drusilla_model`.
 
 ## Config schema
 
@@ -209,7 +207,6 @@ the per-species steps).
 - `drusilla_model`: one GPU (tested on 40 GB A100-class cards) with batch size
   400 and `chunk_len=9999`, 64 GB of host RAM requested (peak about
   17 GB), about 20 min per epoch of 2000 steps.
-- Vertebrate model: single 40 GB A100 GPU, batch size 400.
 - Fine-tuning from released weights fits in ~10 GB with batch size 100.
 
 ## Output layout

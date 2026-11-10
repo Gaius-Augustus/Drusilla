@@ -1,10 +1,11 @@
 # Drusilla default architecture / training config.
 #
-# Generic starting point. The released vertebrate model was trained with
-# configs/vertebrates.yaml (same layer shapes; different dropout, learning
-# rate, loss and class weights). To fine-tune from released weights, keep
-# the `model:` block shape-compatible (conv_*, pool_size, lstm_units,
-# lstm_layers, head_hidden) and tune the `training:` block.
+# Generic starting point. drusilla_model was trained with
+# configs/drusilla_model.yaml (same layer shapes; different dropout,
+# optimiser, loss, class weights and data pipeline). To fine-tune from the
+# released weights, keep the `model:` block shape-compatible (conv_*,
+# pool_size, lstm_units, lstm_layers, head_hidden) and tune the
+# `training:` block.
 
 data:
   chunk_len: 9999

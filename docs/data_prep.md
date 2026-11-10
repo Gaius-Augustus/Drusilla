@@ -143,7 +143,7 @@ manifests.
   "..."` and `Parent=...`).
 - Antisense-only overlaps are labelled all-IR on purpose — the model
   should learn to reject them.
-- Label policy v1 (per-clade models `vertebrates`, `insects`): unstranded
+- Label policy v1 (the per-clade models of Drusilla 0.2, now only `insects`): unstranded
   transcripts were labelled on the forward strand only, only the longest
   contained CDS of a transcript was labelled, and the `partial` / `pseudo`
   flags were ignored. TFRecords built with the current code differ from

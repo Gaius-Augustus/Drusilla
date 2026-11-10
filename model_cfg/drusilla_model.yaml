@@ -5,7 +5,7 @@
 # checkout, drusilla/_bundled/ in an installed wheel); nothing is downloaded.
 # weights_sha256 is the SHA256 of the weights file and is checked on every use.
 #
-# Field reference: see vertebrates.yaml (a downloaded, archive-based manifest).
+# Field reference: see insects.yaml (a downloaded, archive-based manifest).
 # Specific to this manifest:
 #   weights_path / arch_path   bundled weights file + architecture config
 #   label_policy               the label policy the training data was built with

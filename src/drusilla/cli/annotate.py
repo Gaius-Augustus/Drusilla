@@ -9,7 +9,7 @@ Two input modes:
 
 Model weights are resolved via the registry: the bundled ``drusilla_model``
 is used by default, ``--model <name>`` selects another registered model
-(the legacy per-clade models are downloaded on first use), and
+(the legacy insect model is downloaded on first use), and
 ``--weights <path>`` loads a locally-trained checkpoint.
 
 Default output (in --out-dir):
@@ -475,7 +475,7 @@ def _make_predict_func(
 
 # Model used when neither --model nor --weights is given: the bundled
 # multi-clade model (model_cfg/drusilla_model.yaml, weights in the package).
-# The legacy per-clade models stay available by name (downloaded on use).
+# The legacy insect model stays available by name (downloaded on use).
 DEFAULT_MODEL = "drusilla_model"
 
 # Inference options a model manifest may preset in its ``annotate_defaults``

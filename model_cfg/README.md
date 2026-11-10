@@ -52,11 +52,11 @@ To ship new weights for `drusilla_model`:
    plain git object (no LFS), so every replacement adds its size to the
    history; replace them for real releases only.
 
-## Downloaded model (`weights_url`): legacy per-clade models
+## Downloaded model (`weights_url`): legacy `insects`
 
-[vertebrates.yaml](vertebrates.yaml) and [insects.yaml](insects.yaml) are
-the models of Drusilla 0.2, kept for reproducibility (`--model vertebrates`,
-`--model insects`); see `vertebrates.yaml` for the inline field reference.
+[insects.yaml](insects.yaml) is the insect model of Drusilla 0.2, kept for
+reproducibility (`--model insects`); it also holds the inline field
+reference.
 The weights live in a `.tar.gz` archive at `weights_url`, which must extract
 to a directory named exactly like the model, `<name>/`, containing:
 
@@ -89,8 +89,8 @@ here with `weights_url`, `weights_sha256` and `training_run`.
   (`nonoverlap|longest|both`), `orfs_per_tx` (int >= 0), `flank_bp`,
   `flank_3p_bp` (int >= 0), `flank_keep` (bool). Unknown keys or wrong
   types abort `annotate` with a message. `drusilla_model` presets the
-  inference rules it was trained and benchmarked with; the per-clade
-  manifests set nothing and so keep the built-in defaults.
+  inference rules it was trained and benchmarked with; the `insects`
+  manifest sets nothing and so keeps the built-in defaults.
 - `label_policy`: informational, the label policy of the training data
-  (`v1` for the per-clade models, `v2` for `drusilla_model`; see
+  (`v1` for `insects`, `v2` for `drusilla_model`; see
   `docs/data_prep.md`).

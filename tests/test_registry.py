@@ -15,9 +15,9 @@ from drusilla import registry
 
 def test_bundled_manifest_loads():
     manifests = registry.list_manifests()
-    assert "vertebrates" in manifests
-    mf = manifests["vertebrates"]
-    assert mf.name == "vertebrates"
+    assert "insects" in manifests
+    mf = manifests["insects"]
+    assert mf.name == "insects"
     assert mf.version
     assert mf.weights_url
 
@@ -76,7 +76,7 @@ def test_cache_dir_respects_env(tmp_path, monkeypatch):
 
 def test_status_uncached(tmp_path, monkeypatch):
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path))
-    st = registry.local_status("vertebrates")
+    st = registry.local_status("insects")
     assert st["cached"] is False
 
 
@@ -361,7 +361,9 @@ def test_every_repo_manifest_is_discoverable():
     """All model_cfg/*.yaml in the repo load through the registry."""
     repo_cfg = Path(__file__).resolve().parents[1] / "model_cfg"
     expected = {p.stem for p in repo_cfg.glob("*.yaml")}
-    assert {"drusilla_model", "vertebrates", "insects"} <= expected
+    assert {"drusilla_model", "insects"} <= expected
+    # The vertebrate model of Drusilla 0.2 was removed: drusilla_model replaces it.
+    assert "vertebrates" not in expected
     assert expected <= set(registry.list_manifests())
 
 

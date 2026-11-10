@@ -11,9 +11,9 @@ writes a genomic GTF of CDS lines.
 > **Model availability.** Drusilla ships one model, `drusilla_model`, for
 > vertebrates, insects, land plants, fungi, diatoms and green algae. Its
 > weights are part of the repository and of the Python package, so nothing
-> is downloaded and `--model` can be omitted. The per-clade models of
-> Drusilla 0.2 (`--model vertebrates`, `--model insects`) stay registered
-> as legacy downloads. See the [Models](#models) section.
+> is downloaded and `--model` can be omitted. The insect model of
+> Drusilla 0.2 (`--model insects`) stays registered as a legacy download.
+> See the [Models](#models) section.
 
 ---
 
@@ -72,8 +72,8 @@ singularity run --nv \
 ```
 
 `--nv` is required for GPU access. The bundled `drusilla_model` is part
-of the image, so nothing is downloaded. Only the legacy per-clade models
-(`--model vertebrates` / `insects`) are downloaded on first use, into
+of the image, so nothing is downloaded. Only the legacy insect model
+(`--model insects`) is downloaded on first use, into
 `~/.cache/drusilla` (or `DRUSILLA_CACHE_DIR`); Singularity binds `$HOME`
 by default, so that download persists across runs.
 
@@ -187,12 +187,12 @@ both-strand scanning with `nonoverlap`, all ORFs per transcript and
 500 bp flanks with ORF completion, because that is how its training
 labels were built and how it was benchmarked. Anything given on the
 command line wins (`--no-unstranded-both-strands`, `--orfs-per-tx 1`,
-`--flank-bp 0` ...). The legacy `vertebrates` and `insects` manifests set
-nothing, so their behaviour is unchanged.
+`--flank-bp 0` ...). The legacy `insects` manifest sets nothing, so its
+behaviour is unchanged.
 
 Example for a compact genome assembled from pooled, partly unstranded
 RNA-seq; with `drusilla_model` the four option lines are its manifest
-presets and can be dropped, with a legacy per-clade model they are needed:
+presets and can be dropped, with the legacy `insects` model they are needed:
 
 ```bash
 drusilla annotate \
@@ -212,26 +212,25 @@ architecture config (`configs/drusilla_model.yaml`) are part of the
 repository and of the wheel; the manifest
 [`model_cfg/drusilla_model.yaml`](model_cfg/drusilla_model.yaml) points at
 them with `weights_path` / `arch_path`, and the SHA256 of the weights file
-is checked on use. The per-clade models of Drusilla 0.2 stay registered as
-legacy downloads.
+is checked on use. The insect model of Drusilla 0.2 stays registered as a
+legacy download.
 
 | Name (`--model`)   | Clade / target      | Status         | Architecture       | Notes |
 |--------------------|---------------------|----------------|--------------------|-------|
 | `drusilla_model`   | Vertebrata, Insecta, Embryophyta, Fungi, diatoms, Chlorophyta | **Released, default, bundled** | CNN + BiLSTM (6-state HMM head) | Trained on 425 species with label policy v2 ([docs/data_prep.md](docs/data_prep.md)), validated on 6 held-out species of 3 clades; epoch 73 of training run `cnn_lstm_joint_run001`. In the test benchmarks it matched or beat every per-clade model (mean gene-level F1 +2.9, land plants +8.8). |
-| `vertebrates`      | Vertebrata          | Legacy (download) | CNN + BiLSTM (6-state HMM head) | Default of Drusilla 0.2. Trained on 51 vertebrate species; validated on 4 held-out species. |
 | `insects`          | Insecta             | Legacy, preliminary (download) | CNN + BiLSTM (6-state HMM head) | Trained on the 99 insect species listed in the manifest. |
 
-What distinguishes `drusilla_model` from the legacy models, apart from the
-clades it covers: its manifest presets both-strand scanning of unstranded
+What distinguishes `drusilla_model` from the legacy `insects` model, apart
+from the clades it covers: its manifest presets both-strand scanning of unstranded
 transcripts with the `nonoverlap` rule, no cap on ORFs per transcript and
 500 bp genomic flanks with ORF completion (see
 [Unstranded, truncated and fused transcripts](#unstranded-truncated-and-fused-transcripts)),
 so `drusilla annotate` needs none of those flags. Its training data follow
 label policy v2, so its predictions can contain several genes per fused
-transcript and minus-strand genes on unstranded transcripts, which the
-per-clade models never emit.
+transcript and minus-strand genes on unstranded transcripts, which
+`insects` never emits.
 
-Applying a legacy per-clade model to species from another clade is
+Applying the legacy `insects` model to species from another clade is
 technically possible but the predictions are not benchmarked and will
 underperform; use `drusilla_model`, or train your own with
 `drusilla train` (see [docs/training.md](docs/training.md)).
@@ -249,11 +248,11 @@ List available models and their local cache status:
 drusilla models list
 ```
 
-Download a legacy per-clade model without running annotate
+Download the legacy insect model without running annotate
 (`drusilla_model` is bundled and needs no download):
 
 ```bash
-drusilla models download vertebrates
+drusilla models download insects
 ```
 
 Downloaded archives are verified against the manifest's SHA256, then
@@ -283,8 +282,7 @@ drusilla train \
 Manifests are two-column TSVs: `species<TAB>path/to/shard.tfrecords[.gz]`
 (one line per shard; gzip shards are read transparently).
 [`configs/drusilla_model.yaml`](configs/drusilla_model.yaml) is the configuration
-of `drusilla_model`, [`configs/vertebrates.yaml`](configs/vertebrates.yaml) that
-of the legacy per-clade models. `--resume` continues a run from its newest epoch
+of `drusilla_model`. `--resume` continues a run from its newest epoch
 checkpoint, including the learning rate it had reached. See
 [docs/training.md](docs/training.md) for full details.
 

@@ -20,8 +20,8 @@ A manifest names its weights in one of two ways:
   checked against ``weights_sha256``, and the extracted directory is
   stamped with the manifest version (``.drusilla_version`` marker), so
   bumping ``version`` triggers a re-download, as does
-  ``drusilla models download NAME --force``. The legacy per-clade models
-  (``vertebrates``, ``insects``) ship this way.
+  ``drusilla models download NAME --force``. The legacy insect model
+  (``insects``) ships this way.
 
 Runtime overrides:
 
