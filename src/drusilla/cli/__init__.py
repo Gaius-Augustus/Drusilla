@@ -4,6 +4,8 @@ Usage:
     drusilla annotate ...
     drusilla train ...
     drusilla models list|download|rm|path <NAME>
+    drusilla filter-subseq ...
+    drusilla strand-fix-bam ...
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ def _build_parser() -> argparse.ArgumentParser:
     from . import train as _train
     from . import models as _models
     from . import filter_subseq as _filter_subseq
+    from . import strand_fix as _strand_fix
 
     p_ann = sub.add_parser("annotate", help="Annotate a transcriptome with predicted ORFs.")
     _annotate.add_args(p_ann)
@@ -45,6 +48,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _filter_subseq.add_args(p_fs)
     p_fs.set_defaults(_func=_filter_subseq.run)
+
+    p_sf = sub.add_parser(
+        "strand-fix-bam",
+        help="Recover per-run library strandedness in a pooled BAM (XS tags) "
+             "before StringTie.",
+    )
+    _strand_fix.add_args(p_sf)
+    p_sf.set_defaults(_func=_strand_fix.run)
 
     return ap
 

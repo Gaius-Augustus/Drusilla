@@ -3,7 +3,7 @@
 Mirrors the Tiberius approach (``tiberius.main.get_gpu_memory_gb`` /
 ``compute_auto_batch_size``) but recalibrated for Drusilla's much shorter
 default ``chunk_len`` of ~10k (vs Tiberius's ~500k) and for the CNN-BiLSTM
-architecture used by the vertebrate / embryophyta releases.
+architecture used by the released models.
 
 Empirical anchor: chunk_len=9999 with the default cnn_lstm architecture
 fits batch_size=200 on a 40 GB A100, ~400 on an 80 GB A100. All other

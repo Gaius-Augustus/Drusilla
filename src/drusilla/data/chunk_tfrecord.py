@@ -9,11 +9,15 @@ final chunk is partial): input has PAD=1 and all other channels 0; output is
 all-zero (no class is one-hot). The training loop must ignore positions where
 `input[..., 5] == 1` when computing the loss.
 
-TFRecord schema:
+TFRecord schema (mirrors Tiberius naming for `input`/`output`):
   * `input`    bytes - serialized uint8 tensor [L, 6]
   * `output`   bytes - serialized uint8 tensor [L, 6]
   * `tx_id`    bytes - utf-8 transcript id
   * `chunk_idx` int64 - 0-based chunk index within the transcript
+
+Files named ``*.tfrecords.gz`` are written and read GZIP-compressed (TFRecord
+``compression_type="GZIP"``). The one-hot payload shrinks about 45x, which is
+what keeps a 442-species training set inside the project quota.
 """
 
 from __future__ import annotations
@@ -25,17 +29,23 @@ import numpy as np
 
 
 DEFAULT_CHUNK_LEN = 9999
-NUM_NT_CHANNELS = 5
-NUM_INPUT_CHANNELS = 6
-NUM_CLASSES = 6
+NUM_NT_CHANNELS = 5      # A, C, G, T, N
+NUM_INPUT_CHANNELS = 6   # + PAD
+NUM_CLASSES = 6          # IR, START, E1, E2, E0, STOP
 
 
+# index in the 5-channel nt one-hot; anything else (a, u, etc.) -> N
 _NT_TO_IDX = {ord(c): i for c, i in zip("ACGTN", range(5))}
 _NT_TO_IDX.update({ord(c.lower()): i for c, i in zip("ACGTN", range(5))})
 
 
+# ---------- FASTA reading (minimal) ----------
+
 def read_fasta(path: Path | str) -> dict[str, str]:
-    """Read a FASTA file into a ``{record_id: sequence}`` dict."""
+    """Read a FASTA file into a ``{record_id: sequence}`` dict.
+
+    Record IDs are the header text up to the first whitespace.
+    """
     out: dict[str, str] = {}
     current_name: str | None = None
     current_chunks: list[str] = []
@@ -54,8 +64,13 @@ def read_fasta(path: Path | str) -> dict[str, str]:
     return out
 
 
+# ---------- encoding ----------
+
 def encode_nucleotides(seq: str) -> np.ndarray:
-    """Return a [L, 5] uint8 one-hot of A,C,G,T,N (any other letter -> N)."""
+    """Return a [L, 5] uint8 one-hot of A,C,G,T,N.
+
+    Any character outside ACGT (case-insensitive) is encoded as N.
+    """
     arr = np.zeros((len(seq), NUM_NT_CHANNELS), dtype=np.uint8)
     for i, ch in enumerate(seq):
         arr[i, _NT_TO_IDX.get(ord(ch), 4)] = 1
@@ -72,6 +87,7 @@ def labels_to_onehot(labels: np.ndarray) -> np.ndarray:
 
 
 def pad_to_length(arr: np.ndarray, length: int, fill: int = 0) -> np.ndarray:
+    """Pad a 1-D int array on the right with ``fill`` up to ``length``."""
     if arr.shape[0] >= length:
         return arr[:length]
     out = np.full((length,), fill, dtype=arr.dtype)
@@ -79,12 +95,18 @@ def pad_to_length(arr: np.ndarray, length: int, fill: int = 0) -> np.ndarray:
     return out
 
 
+# ---------- chunking ----------
+
 def chunk_transcript(
     seq: str,
     labels: np.ndarray,
     chunk_len: int = DEFAULT_CHUNK_LEN,
 ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
-    """Yield ``(input_chunk, output_chunk)`` pairs for one transcript."""
+    """Yield ``(input_chunk, output_chunk)`` pairs for one transcript.
+
+    Each pair has shape ``(chunk_len, 6)``. Chunks tile the transcript with no
+    overlap; the last (possibly short) chunk is padded on the right.
+    """
     if len(seq) != labels.shape[0]:
         raise ValueError(
             f"seq length {len(seq)} does not match labels length {labels.shape[0]}"
@@ -100,11 +122,13 @@ def chunk_transcript(
         sub_lab = labels[start:end]
         real_len = len(sub_seq)
 
+        # [chunk_len, 6]  = nt one-hot (first 5 channels) + pad channel (6th)
         input_chunk = np.zeros((chunk_len, NUM_INPUT_CHANNELS), dtype=np.uint8)
         if real_len > 0:
             input_chunk[:real_len, :NUM_NT_CHANNELS] = encode_nucleotides(sub_seq)
-        input_chunk[real_len:, NUM_NT_CHANNELS] = 1
+        input_chunk[real_len:, NUM_NT_CHANNELS] = 1   # pad channel
 
+        # [chunk_len, 6]  = label one-hot; all zeros on the padded tail.
         output_chunk = np.zeros((chunk_len, NUM_CLASSES), dtype=np.uint8)
         if real_len > 0:
             output_chunk[:real_len] = labels_to_onehot(np.asarray(sub_lab))
@@ -126,8 +150,10 @@ def chunk_all(
             yield tid, ci, x, y
 
 
+# ---------- TFRecord I/O (lazy TF import) ----------
+
 def _tf():
-    import tensorflow as tf
+    import tensorflow as tf   # imported on demand
     return tf
 
 
@@ -154,13 +180,27 @@ def serialize_example(
     return ex.SerializeToString()
 
 
+def tfrecord_compression(path: Path | str) -> str:
+    """TFRecord ``compression_type`` implied by the file name: ``"GZIP"`` for
+    ``*.tfrecords.gz`` (also while still named ``*.gz.tmp``), else ``""``."""
+    name = str(path)
+    if name.endswith(".tmp"):
+        name = name[: -len(".tmp")]
+    return "GZIP" if name.endswith(".gz") else ""
+
+
 def write_tfrecord(
     path: Path | str,
     examples: Iterable[tuple[str, int, np.ndarray, np.ndarray]],
+    compression: str | None = None,
 ) -> int:
+    """Write ``examples`` to ``path``; ``compression`` is ``"GZIP"`` or ``""``
+    and defaults to what ``tfrecord_compression(path)`` reads off the name."""
     tf = _tf()
+    if compression is None:
+        compression = tfrecord_compression(path)
     n = 0
-    with tf.io.TFRecordWriter(str(path)) as writer:
+    with tf.io.TFRecordWriter(str(path), compression or None) as writer:
         for tx_id, chunk_idx, x, y in examples:
             writer.write(serialize_example(x, y, tx_id, chunk_idx))
             n += 1
@@ -168,6 +208,7 @@ def write_tfrecord(
 
 
 def parse_example_spec(chunk_len: int = DEFAULT_CHUNK_LEN):
+    """Return the ``{feature: FixedLenFeature}`` spec for ``tf.io.parse_example``."""
     tf = _tf()
     return {
         "input":     tf.io.FixedLenFeature([], tf.string),
@@ -178,6 +219,7 @@ def parse_example_spec(chunk_len: int = DEFAULT_CHUNK_LEN):
 
 
 def decode_example(serialized: bytes, chunk_len: int = DEFAULT_CHUNK_LEN):
+    """Decode a serialized example into numpy arrays (useful for tests)."""
     tf = _tf()
     parsed = tf.io.parse_single_example(serialized, parse_example_spec(chunk_len))
     x = tf.io.parse_tensor(parsed["input"], out_type=tf.uint8).numpy()
@@ -197,16 +239,20 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--labels", type=Path, required=True,
                     help="labels.npz (keys = transcript IDs)")
     ap.add_argument("--out", type=Path, required=True,
-                    help="output .tfrecords path")
+                    help="output .tfrecords path (.tfrecords.gz => GZIP)")
     ap.add_argument("--chunk-len", type=int, default=DEFAULT_CHUNK_LEN)
+    ap.add_argument("--compression", choices=("auto", "none", "gzip"), default="auto",
+                    help="auto (default) follows the --out suffix")
     args = ap.parse_args(argv)
 
     sequences = read_fasta(args.fasta)
     with np.load(args.labels, allow_pickle=False) as npz:
         labels = {k: np.asarray(npz[k]) for k in npz.files}
 
+    compression = {"auto": None, "none": "", "gzip": "GZIP"}[args.compression]
     n = write_tfrecord(args.out,
-                       chunk_all(sequences, labels, chunk_len=args.chunk_len))
+                       chunk_all(sequences, labels, chunk_len=args.chunk_len),
+                       compression=compression)
     print(f"wrote {n} chunks -> {args.out}")
     return 0
 

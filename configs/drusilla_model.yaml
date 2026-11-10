@@ -1,0 +1,64 @@
+# Training config of the Drusilla model (drusilla_model): one CNN-BiLSTM for all clades.
+#
+# One CNN-BiLSTM trained on the pooled TFRecords of 425 species from six
+# clades (vertebrates, insects, embryophyta, fungi, diatoms, chlorophyta) with
+# label policy v2 (see docs/data_prep.md), validated on 6 held-out species of
+# three clades. Model and optimiser settings are those of the per-clade
+# models of Drusilla 0.2; only the data pipeline differs:
+#   * cycle_length 0 interleaves every shard, so all species reach the
+#     shuffle buffer (the default of 32 open files would cycle through a
+#     few species at a time);
+#   * the shuffle buffer is 4x larger (about 1 GB of decoded chunks);
+#   * validation is capped per epoch (validation_steps) because the
+#     validation set holds ~300k chunks.
+# One epoch of 2000 steps x 400 chunks covers about 6 % of the 13 M training
+# chunks; the run was trained in 12 h GPU jobs chained with `drusilla train
+# --resume` (docs/training.md).
+
+data:
+  chunk_len: 9999
+  batch_size: 400
+  shuffle_buffer: 8192
+  cycle_length: 0           # 0 = interleave all shards; N = at most N open shards
+
+model:
+  type: cnn_lstm
+
+  conv_filters: 64
+  conv_kernel: 9
+  conv_layers: 2
+
+  cnn_lstm:
+    pool_size: 9
+    lstm_units: 200
+    lstm_layers: 2
+    dropout: 0.0
+    head_hidden: 32
+
+  cnn_transformer:
+    pool_size: 9
+    d_model: 256
+    num_heads: 4
+    ff_dim: 512
+    transformer_layers: 4
+    dropout: 0.1
+    head_hidden: 32
+
+training:
+  loss_type: cce_boundary_f1
+  f1_lambda: 1.0
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  epochs: 300
+  steps_per_epoch: 2000     # 800k chunks per epoch
+  validation_steps: 250     # 100k validation chunks per epoch, deterministic order
+  class_weights: [1, 5, 1, 1, 1, 5]
+
+  lr_reduce:
+    monitor: val_loss
+    patience: 7
+    factor: 0.5
+    min_lr: 1.0e-6
+
+checkpointing:
+  save_every_epoch: true

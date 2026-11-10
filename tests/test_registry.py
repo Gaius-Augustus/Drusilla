@@ -15,11 +15,11 @@ from drusilla import registry
 
 def test_bundled_manifest_loads():
     manifests = registry.list_manifests()
-    assert "vertebrates" in manifests
-    mf = manifests["vertebrates"]
-    assert mf.name == "vertebrates"
+    assert "drusilla_model" in manifests
+    mf = manifests["drusilla_model"]
+    assert mf.name == "drusilla_model"
     assert mf.version
-    assert mf.weights_url
+    assert mf.bundled
 
 
 def test_load_manifest_unknown_raises():
@@ -75,8 +75,13 @@ def test_cache_dir_respects_env(tmp_path, monkeypatch):
 # ---------- status ----------
 
 def test_status_uncached(tmp_path, monkeypatch):
-    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path))
-    st = registry.local_status("vertebrates")
+    """A downloaded model that was never fetched is reported as not cached."""
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    _write_manifest(cfg_dir, "fakemodel", "1.0", "https://example.com/fakemodel.tar.gz")
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+    st = registry.local_status("fakemodel")
     assert st["cached"] is False
 
 
@@ -355,3 +360,126 @@ def test_tar_slip_rejected(tmp_path: Path, monkeypatch):
 
     with pytest.raises(Exception):
         registry.resolve_model("fakemodel")
+
+
+def test_every_repo_manifest_is_discoverable():
+    """All model_cfg/*.yaml in the repo load through the registry."""
+    repo_cfg = Path(__file__).resolve().parents[1] / "model_cfg"
+    expected = {p.stem for p in repo_cfg.glob("*.yaml")}
+    # drusilla_model is the only released model; the per-clade models of
+    # Drusilla 0.2 (vertebrates, insects) were removed.
+    assert expected == {"drusilla_model"}
+    assert expected <= set(registry.list_manifests())
+
+
+def test_wheel_force_includes_whole_model_cfg_dir():
+    """pip / container installs see every manifest only if the directory
+    (not single files) is force-included into the wheel."""
+    tomllib = pytest.importorskip("tomllib")
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    with pyproject.open("rb") as fh:
+        data = tomllib.load(fh)
+    fi = data["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert fi.get("model_cfg") == "drusilla/_bundled/model_cfg"
+    assert fi.get("models/drusilla_model") == "drusilla/_bundled/models/drusilla_model"
+    assert fi.get("configs/drusilla_model.yaml") == "drusilla/_bundled/configs/drusilla_model.yaml"
+    assert fi.get("models/drusilla_model") == "drusilla/_bundled/models/drusilla_model"
+    assert fi.get("configs/drusilla_model.yaml") == "drusilla/_bundled/configs/drusilla_model.yaml"
+
+
+def test_local_status_stale_version_is_not_cached(tmp_path: Path, monkeypatch):
+    """A cache dir whose version marker differs from the manifest is reported
+    as files_present but not cached, matching what resolve_model would do."""
+    workdir = tmp_path / "release"
+    workdir.mkdir()
+    archive = _make_fake_archive("fakemodel", workdir)
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    _write_manifest(cfg_dir, "fakemodel", "1.0", archive.as_uri())
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+
+    r = registry.resolve_model("fakemodel")
+    st = registry.local_status("fakemodel")
+    assert st["cached"] is True and st["files_present"] is True
+    assert st["cached_version"] == "1.0"
+
+    (r.weights_path.parent / registry._VERSION_MARKER).write_text("0.9")
+    st = registry.local_status("fakemodel")
+    assert st["cached"] is False
+    assert st["files_present"] is True
+    assert st["cached_version"] == "0.9"
+    assert st["weights_path"] is not None
+
+
+# ---------- bundled models (weights_path) ----------
+
+def test_bundled_default_model_resolves_without_network(tmp_path: Path, monkeypatch):
+    """drusilla_model ships its weights in the repository: resolving it reads
+    them in place, verifies the SHA256 and touches neither network nor cache."""
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(registry, "_download",
+                        lambda *a, **k: pytest.fail("a bundled model must not download"))
+    mf = registry.load_manifest("drusilla_model")
+    assert mf.bundled and mf.weights_url is None
+    resolved = registry.resolve_model("drusilla_model")
+    assert resolved.weights_path.name == "model.weights.h5" and resolved.weights_path.is_file()
+    assert resolved.arch_config_path.name == "drusilla_model.yaml" and resolved.arch_config_path.is_file()
+    assert resolved.weights_path.stat().st_size > 1_000_000
+    assert not any(registry.cache_dir().iterdir())
+    st = registry.local_status("drusilla_model")
+    assert st["bundled"] and st["cached"] and st["weights_path"] == str(resolved.weights_path)
+    assert registry.clear("drusilla_model") == []
+
+
+def _write_bundled(root: Path, sha: str | None) -> Path:
+    (root / "w").mkdir()
+    (root / "w" / "model.weights.h5").write_bytes(b"not really keras")
+    (root / "w" / "arch.yaml").write_text("model: {type: cnn_lstm}\n")
+    cfg = root / "model_cfg"
+    cfg.mkdir()
+    lines = ["name: bundled", "version: '2'", "weights_path: w/model.weights.h5", "arch_path: w/arch.yaml"]
+    if sha:
+        lines.append(f"weights_sha256: '{sha}'")
+    (cfg / "bundled.yaml").write_text("\n".join(lines) + "\n")
+    return cfg
+
+
+def test_bundled_manifest_relative_paths_resolve_from_cfg_parent(tmp_path: Path, monkeypatch):
+    sha = hashlib.sha256(b"not really keras").hexdigest()
+    cfg = _write_bundled(tmp_path, sha)
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+    r = registry.resolve_model("bundled")
+    assert r.weights_path == (tmp_path / "w" / "model.weights.h5").resolve()
+    assert r.arch_config_path == (tmp_path / "w" / "arch.yaml").resolve()
+    assert registry.local_status("bundled")["cached"] is True
+
+
+def test_bundled_manifest_sha256_mismatch_keeps_file(tmp_path: Path, monkeypatch):
+    cfg = _write_bundled(tmp_path, "0" * 64)
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg))
+    with pytest.raises(registry.RegistryError, match="sha256"):
+        registry.resolve_model("bundled")
+    assert (tmp_path / "w" / "model.weights.h5").exists()   # never deleted, unlike a bad archive
+    st = registry.local_status("bundled")
+    assert st["cached"] is False and "sha256" in st["error"]
+
+
+def test_bundled_manifest_missing_file_reports_tried_paths(tmp_path: Path, monkeypatch):
+    cfg = _write_bundled(tmp_path, None)
+    (tmp_path / "w" / "arch.yaml").unlink()
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg))
+    with pytest.raises(registry.RegistryError, match="arch_path"):
+        registry.resolve_model("bundled")
+
+
+def test_manifest_needs_exactly_one_weights_source(tmp_path: Path, monkeypatch):
+    cfg = tmp_path / "model_cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg))
+    (cfg / "both.yaml").write_text("name: both\nversion: '1'\nweights_url: 'https://x/y.tar.gz'\n"
+                                   "weights_path: w/model.weights.h5\n")
+    with pytest.raises(registry.RegistryError, match="exactly one"):
+        registry.load_manifest("both")

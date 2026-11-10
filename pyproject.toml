@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "drusilla"
-version = "0.1.0"
+version = "0.3.0"
 authors = [
   { name = "Lars Gabriel", email = "lars.gabriel@uni-greifswald.de" },
 ]
@@ -33,7 +33,9 @@ gpu = [
   "hidten",
   "biopython",
   "pandas",
+  "pysam",
 ]
+bam = ["pysam"]
 test = ["pytest"]
 
 [project.scripts]
@@ -47,9 +49,13 @@ Issues = "https://github.com/Gaius-Augustus/Drusilla/issues"
 packages = ["src/drusilla"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"model_cfg/vertebrates.yaml" = "drusilla/_bundled/model_cfg/vertebrates.yaml"
+# The whole manifest directory ships with the wheel: the registry globs
+# *.yaml there, so new models reach pip / container installs without edits.
+"model_cfg"                  = "drusilla/_bundled/model_cfg"
 "configs/default.yaml"       = "drusilla/_bundled/configs/default.yaml"
-"configs/vertebrates.yaml"   = "drusilla/_bundled/configs/vertebrates.yaml"
+"configs/drusilla_model.yaml" = "drusilla/_bundled/configs/drusilla_model.yaml"
+# The released model's weights (28 MB) ship in the wheel as well: no download step.
+"models/drusilla_model"       = "drusilla/_bundled/models/drusilla_model"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
