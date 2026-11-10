@@ -5,12 +5,27 @@
 # checkout, drusilla/_bundled/ in an installed wheel); nothing is downloaded.
 # weights_sha256 is the SHA256 of the weights file and is checked on every use.
 #
-# Field reference: see insects.yaml (a downloaded, archive-based manifest).
-# Specific to this manifest:
-#   weights_path / arch_path   bundled weights file + architecture config
-#   label_policy               the label policy the training data was built with
-#   annotate_defaults          inference options preset for `drusilla annotate`
-#                              (command-line values win; see docs/annotate.md)
+# Field reference:
+#   name                identifier (must match the filename stem)
+#   version             string, shown by `drusilla models list`; bump it with new weights
+#   target_clade        free-text clade label (informational)
+#   ncbi_tax_id         NCBI taxonomy id of the clade (informational)
+#   weights_path        bundled Keras weights file
+#   arch_path           bundled architecture / data config (build_model_from_config)
+#   weights_sha256      SHA256 of the weights file; checked on every use
+#   training_run        training run the weights come from
+#   drusilla_version    minimum drusilla version this release was tested with
+#   default_chunk_len   chunk_len the weights were trained with (informational)
+#   date                YYYY-MM-DD release date
+#   architecture        informational; the real architecture is in arch_path
+#   label_policy        label policy of the training data (docs/data_prep.md)
+#   comment             free text, shown by `drusilla models list`
+#   annotate_defaults   inference options preset for `drusilla annotate`
+#                       (command-line values win; see docs/annotate.md)
+#   validation_species, training_species
+#                       species lists (informational, see the note above them)
+# A downloaded model names a .tar.gz archive in weights_url instead of
+# weights_path / arch_path (see model_cfg/README.md).
 
 name: drusilla_model
 version: "1.0"
@@ -34,8 +49,7 @@ comment: >-
   The Drusilla model: one CNN-BiLSTM for all clades, trained on the pooled label-policy-v2 TFRecords of
   425 species (68 vertebrates, 88 insects, 32 embryophyta, 213 fungi, 18 diatoms, 6 chlorophyta) with
   configs/drusilla_model.yaml; validated on Ornithorhynchus anatinus, Petromyzon marinus, Drosophila
-  ananassae, Drosophila virilis, Tenebrio molitor, Populus trichocarpa. Default model since Drusilla 0.3;
-  replaces the per-clade models vertebrates / insects.
+  ananassae, Drosophila virilis, Tenebrio molitor, Populus trichocarpa. Default model since Drusilla 0.3.
 
 # Inference options that match the training labels (policy v2) and the
 # genomic-flank ORF completion used in the test benchmarks of all clades.
@@ -49,442 +63,446 @@ annotate_defaults:
   flank_3p_bp: 500
   flank_keep: true
 
+# validation_species / training_species: the comment after each species is
+# its genome assembly as listed in the species CSVs of tiberius_orf_finder
+# (nextflow/conf/), from which the TFRecords were built: an NCBI accession,
+# or "Phytozome <id>" for a genome from Phytozome.
 validation_species:
-  - Ornithorhynchus_anatinus
-  - Petromyzon_marinus
-  - Drosophila_ananassae
-  - Drosophila_virilis
-  - Tenebrio_molitor
-  - Populus_trichocarpa
+  - Ornithorhynchus_anatinus          # GCF_004115215.2
+  - Petromyzon_marinus                # GCF_010993605.1
+  - Drosophila_ananassae              # GCF_017639315.1
+  - Drosophila_virilis                # GCF_030788295.1
+  - Tenebrio_molitor                  # GCF_963966145.1
+  - Populus_trichocarpa               # Phytozome 533
 training_species:
   # vertebrates (68)
-  - Acipenser_ruthenus
-  - Alligator_mississippiensis
-  - Alosa_sapidissima
-  - Amblyraja_radiata
-  - Anguilla_anguilla
-  - Anolis_sagrei
-  - Aotus_nancymaae
-  - Apus_apus
-  - Bombina_bombina
-  - Callithrix_jacchus
-  - Camelus_bactrianus
-  - Canis_lupus_familiaris
-  - Carcharodon_carcharias
-  - Cavia_porcellus
-  - Ceratotherium_simum
-  - Chinchilla_lanigera
-  - Condylura_cristata
-  - Corvus_cornix_cornix
-  - Dendropsophus_ebraccatus
-  - Denticeps_clupeoides
-  - Desmodus_rotundus
-  - Dipodomys_merriami
-  - Emys_orbicularis
-  - Enhydra_lutris
-  - Eptesicus_fuscus
-  - Equus_caballus
-  - Erpetoichthys_calabaricus
-  - Esox_lucius
-  - Eublepharis_macularius
-  - Falco_peregrinus
-  - Gavia_stellata
-  - Heloderma_suspectum
-  - Heterocephalus_glaber
-  - Ictidomys_tridecemlineatus
-  - Jaculus_jaculus
-  - Labrus_mixtus
-  - Latimeria_chalumnae
-  - Lepisosteus_oculatus
-  - Loxodonta_africana
-  - Marmota_monax
-  - Megalops_cyprinoides
-  - Microcebus_murinus
-  - Microtus_ochrogaster
-  - Mobula_birostris
-  - Mus_musculus
-  - Mus_pahari
-  - Narcine_bancroftii
-  - Neomonachus_schauinslandi
-  - Ochotona_curzoniae
-  - Octodon_degus
-  - Osmerus_eperlanus
-  - Otolemur_garnettii
-  - Panthera_tigris
-  - Parambassis_ranga
-  - Pelobates_fuscus
-  - Podarcis_muralis
-  - Propithecus_coquereli
-  - Puma_concolor
-  - Rana_temporaria
-  - Rattus_norvegicus
-  - Rhinatrema_bivittatum
-  - Saimiri_boliviensis
-  - Scleropages_formosus
-  - Solea_solea
-  - Sorex_araneus
-  - Sparus_aurata
-  - Trichechus_manatus
-  - Zalophus_californianus
+  - Acipenser_ruthenus                # GCF_902713425.1
+  - Alligator_mississippiensis        # GCF_030867095.1
+  - Alosa_sapidissima                 # GCF_018492685.1
+  - Amblyraja_radiata                 # GCF_010909765.2
+  - Anguilla_anguilla                 # GCF_013347855.1
+  - Anolis_sagrei                     # GCF_037176765.1
+  - Aotus_nancymaae                   # GCF_000952055.2
+  - Apus_apus                         # GCF_020740795.1
+  - Bombina_bombina                   # GCF_027579735.1
+  - Callithrix_jacchus                # GCF_049354715.1
+  - Camelus_bactrianus                # GCF_000767855.1
+  - Canis_lupus_familiaris            # GCF_000002285.3
+  - Carcharodon_carcharias            # GCF_017639515.1
+  - Cavia_porcellus                   # GCF_000151735.1
+  - Ceratotherium_simum               # GCF_000283155.1
+  - Chinchilla_lanigera               # GCF_000276665.1
+  - Condylura_cristata                # GCF_000260355.1
+  - Corvus_cornix_cornix              # GCF_000738735.6
+  - Dendropsophus_ebraccatus          # GCF_027789765.1
+  - Denticeps_clupeoides              # GCF_900700375.1
+  - Desmodus_rotundus                 # GCF_002940915.1
+  - Dipodomys_merriami                # GCF_024711535.1
+  - Emys_orbicularis                  # GCF_028017835.1
+  - Enhydra_lutris                    # GCF_002288905.1
+  - Eptesicus_fuscus                  # GCF_000308155.1
+  - Equus_caballus                    # GCF_000002305.2
+  - Erpetoichthys_calabaricus         # GCF_900747795.2
+  - Esox_lucius                       # GCF_011004845.1
+  - Eublepharis_macularius            # GCF_028583425.1
+  - Falco_peregrinus                  # GCF_023634155.1
+  - Gavia_stellata                    # GCF_030936135.1
+  - Heloderma_suspectum               # GCF_057233095.1
+  - Heterocephalus_glaber             # GCF_000247695.1
+  - Ictidomys_tridecemlineatus        # GCF_000236235.1
+  - Jaculus_jaculus                   # GCF_000280705.1
+  - Labrus_mixtus                     # GCF_963584025.1
+  - Latimeria_chalumnae               # GCF_037176945.1
+  - Lepisosteus_oculatus              # GCF_040954835.1
+  - Loxodonta_africana                # GCF_000001905.1
+  - Marmota_monax                     # GCF_021218885.2
+  - Megalops_cyprinoides              # GCF_013368585.1
+  - Microcebus_murinus                # GCF_000165445.2
+  - Microtus_ochrogaster              # GCF_000317375.1
+  - Mobula_birostris                  # GCF_030028105.1
+  - Mus_musculus                      # GCF_000001635.26
+  - Mus_pahari                        # GCF_900095145.1
+  - Narcine_bancroftii                # GCF_036971445.1
+  - Neomonachus_schauinslandi         # GCF_002201575.1
+  - Ochotona_curzoniae                # GCF_017591425.1
+  - Octodon_degus                     # GCF_000260255.1
+  - Osmerus_eperlanus                 # GCF_963692335.1
+  - Otolemur_garnettii                # GCF_000181295.1
+  - Panthera_tigris                   # GCF_018350195.1
+  - Parambassis_ranga                 # GCF_900634625.1
+  - Pelobates_fuscus                  # GCF_036172605.1
+  - Podarcis_muralis                  # GCF_964188315.1
+  - Propithecus_coquereli             # GCF_000956105.1
+  - Puma_concolor                     # GCF_003327715.1
+  - Rana_temporaria                   # GCF_905171775.1
+  - Rattus_norvegicus                 # GCF_000001895.5
+  - Rhinatrema_bivittatum             # GCF_901001135.1
+  - Saimiri_boliviensis               # GCF_000235385.1
+  - Scleropages_formosus              # GCF_900964775.1
+  - Solea_solea                       # GCF_958295425.1
+  - Sorex_araneus                     # GCF_000181275.1
+  - Sparus_aurata                     # GCF_900880675.1
+  - Trichechus_manatus                # GCF_000243295.1
+  - Zalophus_californianus            # GCF_009762305.2
   # insects (88)
-  - Aedes_aegypti
-  - Agrotis_ipsilon
-  - Amphipyra_tragopoginis
-  - Anabrus_simplex
-  - Anastrepha_ludens
-  - Anopheles_arabiensis
-  - Anopheles_farauti
-  - Anopheles_stephensi
-  - Aphis_glycines
-  - Apis_mellifera
-  - Aporophyla_lueneburgensis
-  - Armigeres_subalbatus
-  - Bactrocera_dorsalis
-  - Bactrocera_minax
-  - Bactrocera_oleae
-  - Bactrocera_tryoni
-  - Bicyclus_anynana
-  - Bombus_impatiens
-  - Bradysia_coprophila
-  - Calliphora_vicina
-  - Camponotus_floridanus
-  - Ceratitis_capitata
-  - Chilo_suppressalis
-  - Chrysoperla_carnea
-  - Cimex_lectularius
-  - Cochliomyia_hominivorax
-  - Cryptotermes_secundus
-  - Culex_quinquefasciatus
-  - Dendroctonus_ponderosae
-  - Dermacentor_andersoni
-  - Diuraphis_noxia
-  - Drosophila_birchii
-  - Drosophila_grimshawi
-  - Drosophila_navojoa
-  - Drosophila_obscura
-  - Drosophila_suzukii
-  - Ennomos_fuscantarius
-  - Episyrphus_balteatus
-  - Frankliniella_occidentalis
-  - Galleria_mellonella
-  - Glossina_palpalis
-  - Gryllus_bimaculatus
-  - Harpegnathos_saltator
-  - Helicoverpa_zea
-  - Hermetia_illucens
-  - Hormaphis_cornu
-  - Hycleus_cichorii
-  - Ips_nitidus
-  - Lasiommata_megera
-  - Leptopilina_boulardi
-  - Malaya_genurostris
-  - Melanaphis_sacchari
-  - Melitaea_cinxia
-  - Metopolophium_dirhodum
-  - Monomorium_pharaonis
-  - Musca_domestica
-  - Mythimna_separata
-  - Nasonia_vitripennis
-  - Nicrophorus_vespilloides
-  - Onthophagus_taurus
-  - Ooceraea_biroi
-  - Operophtera_brumata
-  - Oryctes_rhinoceros
-  - Ostrinia_furnacalis
-  - Pediculus_humanus
-  - Periplaneta_americana
-  - Phlebotomus_papatasi
-  - Plodia_interpunctella
-  - Pogonomyrmex_californicus
-  - Polypedilum_vanderplanki
-  - Propsilocerus_akamusi
-  - Rhogogaster_chlorosoma
-  - Rhopalosiphum_padi
-  - Rhynchophorus_ferrugineus
-  - Schizaphis_graminum
-  - Schlechtendalia_chinensis
-  - Sipha_flava
-  - Sitobion_avenae
-  - Sitophilus_oryzae
-  - Sogatella_furcifera
-  - Solenopsis_invicta
-  - Spodoptera_litura
-  - Stomoxys_calcitrans
-  - Temnothorax_longispinosus
-  - Thrips_palmi
-  - Thymelicus_sylvestris
-  - Trichoplusia_ni
-  - Zeugodacus_cucurbitae
+  - Aedes_aegypti                     # GCF_002204515.2
+  - Agrotis_ipsilon                   # GCA_028554685.2
+  - Amphipyra_tragopoginis            # GCA_905220435.1
+  - Anabrus_simplex                   # GCF_040414725.1
+  - Anastrepha_ludens                 # GCF_028408465.1
+  - Anopheles_arabiensis              # GCF_016920715.1
+  - Anopheles_farauti                 # GCA_000473445.2
+  - Anopheles_stephensi               # GCF_013141755.1
+  - Aphis_glycines                    # GCA_009761285.1
+  - Apis_mellifera                    # GCF_003254395.2
+  - Aporophyla_lueneburgensis         # GCA_932294355.1
+  - Armigeres_subalbatus              # GCF_024139115.2
+  - Bactrocera_dorsalis               # GCF_023373825.1
+  - Bactrocera_minax                  # GCA_021498325.1
+  - Bactrocera_oleae                  # GCF_001188975.3
+  - Bactrocera_tryoni                 # GCF_016617805.1
+  - Bicyclus_anynana                  # GCF_947172395.1
+  - Bombus_impatiens                  # GCF_000188095.3
+  - Bradysia_coprophila               # GCA_014529535.2
+  - Calliphora_vicina                 # GCA_958450345.1
+  - Camponotus_floridanus             # GCF_003227725.1
+  - Ceratitis_capitata                # GCF_000347755.3
+  - Chilo_suppressalis                # GCA_902850365.2
+  - Chrysoperla_carnea                # GCF_905475395.1
+  - Cimex_lectularius                 # GCF_000648675.2
+  - Cochliomyia_hominivorax           # GCA_004302925.2
+  - Cryptotermes_secundus             # GCF_002891405.2
+  - Culex_quinquefasciatus            # GCF_015732765.1
+  - Dendroctonus_ponderosae           # GCF_020466585.1
+  - Dermacentor_andersoni             # GCF_023375885.2
+  - Diuraphis_noxia                   # GCF_001186385.1
+  - Drosophila_birchii                # GCA_008042755.1
+  - Drosophila_grimshawi              # GCF_018153295.1
+  - Drosophila_navojoa                # GCF_001654015.2
+  - Drosophila_obscura                # GCF_018151105.1
+  - Drosophila_suzukii                # GCF_013340165.1
+  - Ennomos_fuscantarius              # GCA_905220475.3
+  - Episyrphus_balteatus              # GCF_945859705.1
+  - Frankliniella_occidentalis        # GCF_000697945.3
+  - Galleria_mellonella               # GCF_026898425.1
+  - Glossina_palpalis                 # GCA_000818775.1
+  - Gryllus_bimaculatus               # GCA_017312745.1
+  - Harpegnathos_saltator             # GCF_003227715.2
+  - Helicoverpa_zea                   # GCF_022581195.2
+  - Hermetia_illucens                 # GCF_905115235.1
+  - Hormaphis_cornu                   # GCA_017140985.1
+  - Hycleus_cichorii                  # GCA_013841215.1
+  - Ips_nitidus                       # GCA_018691245.2
+  - Lasiommata_megera                 # GCA_928268935.1
+  - Leptopilina_boulardi              # GCF_019393585.1
+  - Malaya_genurostris                # GCF_030247185.1
+  - Melanaphis_sacchari               # GCF_002803265.2
+  - Melitaea_cinxia                   # GCF_905220565.1
+  - Metopolophium_dirhodum            # GCA_019925205.1
+  - Monomorium_pharaonis              # GCF_013373865.1
+  - Musca_domestica                   # GCF_000371365.1
+  - Mythimna_separata                 # GCA_029852925.1
+  - Nasonia_vitripennis               # GCF_009193385.2
+  - Nicrophorus_vespilloides          # GCF_001412225.1
+  - Onthophagus_taurus                # GCF_000648695.1
+  - Ooceraea_biroi                    # GCF_003672135.1
+  - Operophtera_brumata               # GCA_932527175.1
+  - Oryctes_rhinoceros                # GCA_020654165.1
+  - Ostrinia_furnacalis               # GCF_004193835.2
+  - Pediculus_humanus                 # GCF_000006295.1
+  - Periplaneta_americana             # GCA_025594305.2
+  - Phlebotomus_papatasi              # GCF_024763615.1
+  - Plodia_interpunctella             # GCF_027563975.1
+  - Pogonomyrmex_californicus         # GCA_024349325.1
+  - Polypedilum_vanderplanki          # GCA_018290095.1
+  - Propsilocerus_akamusi             # GCA_018397935.1
+  - Rhogogaster_chlorosoma            # GCA_944452935.1
+  - Rhopalosiphum_padi                # GCA_020882245.1
+  - Rhynchophorus_ferrugineus         # GCA_030347505.1
+  - Schizaphis_graminum               # GCA_020882235.1
+  - Schlechtendalia_chinensis         # GCA_019022885.1
+  - Sipha_flava                       # GCF_003268045.1
+  - Sitobion_avenae                   # GCA_019425605.1
+  - Sitophilus_oryzae                 # GCF_002938485.1
+  - Sogatella_furcifera               # GCA_017141385.1
+  - Solenopsis_invicta                # GCF_016802725.1
+  - Spodoptera_litura                 # GCF_002706865.2
+  - Stomoxys_calcitrans               # GCF_963082655.1
+  - Temnothorax_longispinosus         # GCA_030848805.1
+  - Thrips_palmi                      # GCF_012932325.1
+  - Thymelicus_sylvestris             # GCA_911387775.1
+  - Trichoplusia_ni                   # GCF_003590095.1
+  - Zeugodacus_cucurbitae             # GCF_028554725.1
   # embryophyta (32)
-  - Acorus_americanus
-  - Aquilegia_coerulea
-  - Arundo_donax
-  - Beta_vulgaris
-  - Brassica_rapa
-  - Capparis_spinosa
-  - Chasmanthium_laxum
-  - Citrus_limon
-  - Cleome_violacea
-  - Coffea_arabica
-  - Daucus_carota
-  - Dioscorea_alata
-  - Eucalyptus_grandis
-  - Fragaria_vesca
-  - Glycine_max
-  - Gossypium_hirsutum
-  - Joinvillea_ascendens
-  - Lactuca_sativa
-  - Lindenbergia_philippensis
-  - Malus_domestica
-  - Mentha_longifolia
-  - Miscanthus_sinensis
-  - Moringa_oleifera
-  - Musa_acuminata
-  - Myrothamnus_flabellifolia
-  - Oryza_sativa
-  - Panicum_virgatum
-  - Pharus_latifolius
-  - Setaria_viridis
-  - Ulmus_americana
-  - Yucca_filamentosa
-  - Zingiber_officinale
+  - Acorus_americanus                 # Phytozome 586
+  - Aquilegia_coerulea                # Phytozome 322
+  - Arundo_donax                      # Phytozome 1047
+  - Beta_vulgaris                     # Phytozome 782
+  - Brassica_rapa                     # Phytozome 714
+  - Capparis_spinosa                  # Phytozome 851
+  - Chasmanthium_laxum                # Phytozome 690
+  - Citrus_limon                      # Phytozome 831
+  - Cleome_violacea                   # Phytozome 585
+  - Coffea_arabica                    # Phytozome 871
+  - Daucus_carota                     # Phytozome 861
+  - Dioscorea_alata                   # Phytozome 550
+  - Eucalyptus_grandis                # Phytozome 891
+  - Fragaria_vesca                    # Phytozome 677
+  - Glycine_max                       # Phytozome 880
+  - Gossypium_hirsutum                # Phytozome 695
+  - Joinvillea_ascendens              # Phytozome 587
+  - Lactuca_sativa                    # Phytozome LsPKU06
+  - Lindenbergia_philippensis         # Phytozome 689
+  - Malus_domestica                   # Phytozome WA_38_v1.0
+  - Mentha_longifolia                 # Figshare (no accession recorded)
+  - Miscanthus_sinensis               # Phytozome 497
+  - Moringa_oleifera                  # Phytozome 866
+  - Musa_acuminata                    # GCF_036884655.1
+  - Myrothamnus_flabellifolia         # Phytozome 856
+  - Oryza_sativa                      # Phytozome 499
+  - Panicum_virgatum                  # Phytozome 516
+  - Pharus_latifolius                 # Phytozome 680
+  - Setaria_viridis                   # Phytozome 726
+  - Ulmus_americana                   # Phytozome 881
+  - Yucca_filamentosa                 # Phytozome 837
+  - Zingiber_officinale               # GCF_018446385.1
   # fungi (213)
-  - Aaosphaeria_arxii
-  - Alternaria_burnsii
-  - Alternaria_rosae
-  - Amorphotheca_resinae
-  - Annulohypoxylon_maeteangense
-  - Annulohypoxylon_truncatum
-  - Ascochyta_rabiei
-  - Aspergillus_aculeatus
-  - Aspergillus_alliaceus
-  - Aspergillus_brunneoviolaceus
-  - Aspergillus_caelatus
-  - Aspergillus_campestris
-  - Aspergillus_candidus
-  - Aspergillus_chevalieri
-  - Aspergillus_fijiensis
-  - Aspergillus_fischeri
-  - Aspergillus_glaucus
-  - Aspergillus_heteromorphus
-  - Aspergillus_homomorphus
-  - Aspergillus_ibericus
-  - Aspergillus_japonicus
-  - Aspergillus_lentulus
-  - Aspergillus_neoniger
-  - Aspergillus_piperis
-  - Aspergillus_puulaauensis
-  - Aspergillus_saccharolyticus
-  - Aspergillus_sclerotioniger
-  - Aspergillus_steynii
-  - Aspergillus_sydowii
-  - Aspergillus_tubingensis
-  - Aspergillus_udagawae
-  - Aspergillus_uvarum
-  - Aspergillus_vadensis
-  - Aspergillus_versicolor
-  - Aspergillus_viridinutans
-  - Aspergillus_wentii
-  - Aureobasidium_melanogenum
-  - Aureobasidium_pullulans
-  - Batrachochytrium_dendrobatidis
-  - Beauveria_bassiana
-  - Bipolaris_oryzae
-  - Boeremia_exigua
-  - Botrytis_byssoidea
-  - Botrytis_cinerea
-  - Botrytis_deweyae
-  - Botrytis_fragariae
-  - Botrytis_porri
-  - Botrytis_sinoallii
-  - Candida_albicans
-  - Candida_orthopsilosis
-  - Candida_parapsilosis
-  - Chaetomium_fimeti
-  - Chaetomium_strumarium
-  - Chaetomium_tenue
-  - Clavispora_lusitaniae
-  - Coccidioides_immitis
-  - Cokeromyces_recurvatus
-  - Colletotrichum_acutatum
-  - Colletotrichum_godetiae
-  - Colletotrichum_graminicola
-  - Colletotrichum_navitas
-  - Colletotrichum_phormii
-  - Cryptococcus_amylolentus
-  - Cryptococcus_bacillisporus
-  - Cryptococcus_decagattii
-  - Cryptococcus_deuterogattii
-  - Cryptococcus_gattii
-  - Cryptococcus_neoformans
-  - Cryptococcus_tetragattii
-  - Cyberlindnera_jadinii
-  - Daldinia_caldariorum
-  - Daldinia_decipiens
-  - Daldinia_vernicosa
-  - Debaryomyces_fabryi
-  - Debaryomyces_hansenii
-  - Desarmillaria_tabescens
-  - Diaporthe_amygdali
-  - Dichomitus_squalens
-  - Didymella_exigua
-  - Dioszegia_hungarica
-  - Dothidotthia_symphoricarpi
-  - Drechmeria_coniospora
-  - Drepanopeziza_brunnea
-  - Durotheca_rogersii
-  - Emericellopsis_atlantica
-  - Exophiala_dermatitidis
-  - Exophiala_oligosperma
-  - Exophiala_spinifera
-  - Exophiala_viscosa
-  - Exophiala_xenobiotica
-  - Fomitiporia_mediterranea
-  - Fulvia_fulva
-  - Fusarium_fujikuroi
-  - Fusarium_mangiferae
-  - Fusarium_odoratissimum
-  - Fusarium_proliferatum
-  - Fusarium_pseudograminearum
-  - Fusarium_redolens
-  - Fusarium_vanettenii
-  - Fusarium_venenatum
-  - Fusarium_verticillioides
-  - Gaeumannomyces_tritici
-  - Gamsiella_multidivaricata
-  - Gilbertella_persicaria
-  - Gloeophyllum_trabeum
-  - Halteromyces_radiatus
-  - Heterobasidion_irregulare
-  - Hyphopichia_burtonii
-  - Hypoxylon_fragiforme
-  - Hypoxylon_trugodes
-  - Ilyonectria_robusta
-  - Kickxella_alabastrina
-  - Kluyveromyces_lactis
-  - Kluyveromyces_marxianus
-  - Kockovaella_imperatae
-  - Komagataella_phaffii
-  - Kuraishia_capsulata
-  - Lachancea_thermotolerans
-  - Laetiporus_sulphureus
-  - Lasiodiplodia_theobromae
-  - Lasiosphaeria_miniovina
-  - Lentinula_edodes
-  - Linderina_pennispora
-  - Lindgomyces_ingoldianus
-  - Lipomyces_tetrasporus
-  - Lobosporangium_transversale
-  - Macroventuria_anomochaeta
-  - Metarhizium_brunneum
-  - Metarhizium_robertsii
-  - Mollisia_scopiformis
-  - Morchella_importuna
-  - Mucor_mucedo
-  - Mucor_velutinosus
-  - Mycotypha_africana
-  - Mytilinidion_resinicola
-  - Myxozyma_melibiosi
-  - Nakaseomyces_glabratus
-  - Neohortaea_acidophila
-  - Neurospora_crassa
-  - Neurospora_tetraspora
-  - Paecilomyces_variotii
-  - Paraphaeosphaeria_sporulosa
-  - Parathielavia_appendiculata
-  - Penicillium_atrosanguineum
-  - Penicillium_brevicompactum
-  - Penicillium_chrysogenum
-  - Penicillium_coprophilum
-  - Penicillium_digitatum
-  - Penicillium_expansum
-  - Penicillium_oxalicum
-  - Penicillium_solitum
-  - Penicillium_subrubescens
-  - Phycomyces_blakesleeanus
-  - Phyllosticta_capitalensis
-  - Phyllosticta_citribraziliensis
-  - Plenodomus_lingam
-  - Pleurotus_ostreatus
-  - Polychytrium_aggregatum
-  - Postia_placenta
-  - Priceomyces_carsonii
-  - Pseudocercospora_fijiensis
-  - Pseudogymnoascus_verrucosus
-  - Pseudomassariella_vexata
-  - Pseudozyma_hubeiensis
-  - Psilocybe_cubensis
-  - Purpureocillium_lilacinum
-  - Pyricularia_grisea
-  - Pyricularia_oryzae
-  - Radiomyces_spectabilis
-  - Ramularia_collo-cygni
-  - Rhizophagus_irregularis
-  - Rhizopus_microsporus
-  - Rhodotorula_toruloides
-  - Saccharomyces_cerevisiae
-  - Saccharomyces_kudriavzevii
-  - Saccharomyces_mikatae
-  - Saccharomyces_paradoxus
-  - Saitoella_complicata
-  - Scheffersomyces_amazonensis
-  - Scheffersomyces_stipitis
-  - Scheffersomyces_xylosifermentans
-  - Schizosaccharomyces_cryophilus
-  - Schizosaccharomyces_japonicus
-  - Schizosaccharomyces_octosporus
-  - Schizosaccharomyces_pombe
-  - Sordaria_macrospora
-  - Sphaerulina_musiva
-  - Spizellomyces_punctatus
-  - Suillus_bovinus
-  - Suillus_clintonianus
-  - Suillus_fuscotomentosus
-  - Suillus_paluster
-  - Suillus_plorans
-  - Suillus_subalutaceus
-  - Talaromyces_proteolyticus
-  - Torulaspora_delbrueckii
-  - Trametes_versicolor
-  - Trematosphaeria_pertusa
-  - Trichoderma_aggressivum
-  - Trichoderma_breve
-  - Trichoderma_harzianum
-  - Trichoderma_reesei
-  - Trichoderma_virens
-  - Truncatella_angustata
-  - Umbelopsis_ramanniana
-  - Ustilaginoidea_virens
-  - Ustilago_hordei
-  - Ustilago_maydis
-  - Westerdykella_ornata
-  - Wickerhamomyces_anomalus
-  - Xylaria_bambusicola
-  - Yarrowia_lipolytica
-  - Zychaea_mexicana
+  - Aaosphaeria_arxii                 # GCF_010015735.1
+  - Alternaria_burnsii                # GCF_013036055.1
+  - Alternaria_rosae                  # GCF_020736505.1
+  - Amorphotheca_resinae              # GCF_003019875.1
+  - Annulohypoxylon_maeteangense      # GCF_022496945.1
+  - Annulohypoxylon_truncatum         # GCF_022578515.1
+  - Ascochyta_rabiei                  # GCF_004011695.2
+  - Aspergillus_aculeatus             # GCF_001890905.1
+  - Aspergillus_alliaceus             # GCF_009176365.1
+  - Aspergillus_brunneoviolaceus      # GCF_003184695.1
+  - Aspergillus_caelatus              # GCF_009193585.1
+  - Aspergillus_campestris            # GCF_002847485.1
+  - Aspergillus_candidus              # GCF_002847045.1
+  - Aspergillus_chevalieri            # GCF_016861735.1
+  - Aspergillus_fijiensis             # GCF_003184825.1
+  - Aspergillus_fischeri              # GCF_000149645.3
+  - Aspergillus_glaucus               # GCF_001890805.1
+  - Aspergillus_heteromorphus         # GCF_003184545.1
+  - Aspergillus_homomorphus           # GCF_003184865.1
+  - Aspergillus_ibericus              # GCF_003184845.1
+  - Aspergillus_japonicus             # GCF_003184785.1
+  - Aspergillus_lentulus              # GCF_010724455.1
+  - Aspergillus_neoniger              # GCF_003184625.1
+  - Aspergillus_piperis               # GCF_003184755.1
+  - Aspergillus_puulaauensis          # GCF_016861865.1
+  - Aspergillus_saccharolyticus       # GCF_003184585.1
+  - Aspergillus_sclerotioniger        # GCF_003184525.1
+  - Aspergillus_steynii               # GCF_002849105.1
+  - Aspergillus_sydowii               # GCF_001890705.1
+  - Aspergillus_tubingensis           # GCF_013340325.1
+  - Aspergillus_udagawae              # GCF_001078395.1
+  - Aspergillus_uvarum                # GCF_003184745.1
+  - Aspergillus_vadensis              # GCF_003184925.1
+  - Aspergillus_versicolor            # GCF_001890125.1
+  - Aspergillus_viridinutans          # GCF_018404265.1
+  - Aspergillus_wentii                # GCF_001890725.1
+  - Aureobasidium_melanogenum         # GCF_000721775.1
+  - Aureobasidium_pullulans           # GCF_000721785.1
+  - Batrachochytrium_dendrobatidis    # GCF_000203795.2
+  - Beauveria_bassiana                # GCF_000280675.1
+  - Bipolaris_oryzae                  # GCF_000523455.1
+  - Boeremia_exigua                   # GCF_020726555.1
+  - Botrytis_byssoidea                # GCF_014898295.1
+  - Botrytis_cinerea                  # GCF_000143535.2
+  - Botrytis_deweyae                  # GCF_014898535.1
+  - Botrytis_fragariae                # GCF_013461495.1
+  - Botrytis_porri                    # GCF_014898465.1
+  - Botrytis_sinoallii                # GCF_014898435.1
+  - Candida_albicans                  # GCF_000182965.3
+  - Candida_orthopsilosis             # GCF_000315875.1
+  - Candida_parapsilosis              # GCF_000182765.1
+  - Chaetomium_fimeti                 # GCF_033439085.1
+  - Chaetomium_strumarium             # GCF_033439665.1
+  - Chaetomium_tenue                  # GCF_020726465.1
+  - Clavispora_lusitaniae             # GCF_014636115.1
+  - Coccidioides_immitis              # GCF_000149335.2
+  - Cokeromyces_recurvatus            # GCF_025118155.1
+  - Colletotrichum_acutatum           # GCF_030867785.1
+  - Colletotrichum_godetiae           # GCF_030913485.1
+  - Colletotrichum_graminicola        # GCF_000149035.1
+  - Colletotrichum_navitas            # GCF_030913465.1
+  - Colletotrichum_phormii            # GCF_030913505.1
+  - Cryptococcus_amylolentus          # GCF_001720205.1
+  - Cryptococcus_bacillisporus        # GCF_000836335.1
+  - Cryptococcus_decagattii           # GCF_036417295.1
+  - Cryptococcus_deuterogattii        # GCF_002954075.1
+  - Cryptococcus_gattii               # GCF_000185945.1
+  - Cryptococcus_neoformans           # GCF_000091045.1
+  - Cryptococcus_tetragattii          # GCF_000835755.1
+  - Cyberlindnera_jadinii             # GCF_001661405.1
+  - Daldinia_caldariorum              # GCF_022478825.1
+  - Daldinia_decipiens                # GCF_022478715.1
+  - Daldinia_vernicosa                # GCF_022497035.1
+  - Debaryomyces_fabryi               # GCF_001447935.2
+  - Debaryomyces_hansenii             # GCF_000006445.2
+  - Desarmillaria_tabescens           # GCF_030435595.1
+  - Diaporthe_amygdali                # GCF_026229845.1
+  - Dichomitus_squalens               # GCF_000275845.1
+  - Didymella_exigua                  # GCF_010094145.1
+  - Dioszegia_hungarica               # GCF_025882075.1
+  - Dothidotthia_symphoricarpi        # GCF_010015815.1
+  - Drechmeria_coniospora             # GCF_001625195.1
+  - Drepanopeziza_brunnea             # GCF_022702325.1
+  - Durotheca_rogersii                # GCF_024521655.1
+  - Emericellopsis_atlantica          # GCF_019669845.1
+  - Exophiala_dermatitidis            # GCF_000230625.1
+  - Exophiala_oligosperma             # GCF_000835515.1
+  - Exophiala_spinifera               # GCF_000836115.1
+  - Exophiala_viscosa                 # GCF_022695815.1
+  - Exophiala_xenobiotica             # GCF_000835505.1
+  - Fomitiporia_mediterranea          # GCF_000271605.1
+  - Fulvia_fulva                      # GCF_020509005.1
+  - Fusarium_fujikuroi                # GCF_900079805.1
+  - Fusarium_mangiferae               # GCF_900044065.1
+  - Fusarium_odoratissimum            # GCF_000260195.1
+  - Fusarium_proliferatum             # GCF_900067095.1
+  - Fusarium_pseudograminearum        # GCF_000303195.2
+  - Fusarium_redolens                 # GCF_020744475.1
+  - Fusarium_vanettenii               # GCF_000151355.1
+  - Fusarium_venenatum                # GCF_020744135.1
+  - Fusarium_verticillioides          # GCF_000149555.1
+  - Gaeumannomyces_tritici            # GCF_000145635.1
+  - Gamsiella_multidivaricata         # GCF_025024155.1
+  - Gilbertella_persicaria            # GCF_025201335.1
+  - Gloeophyllum_trabeum              # GCF_000344685.1
+  - Halteromyces_radiatus             # GCF_025201355.1
+  - Heterobasidion_irregulare         # GCF_000320585.1
+  - Hyphopichia_burtonii              # GCF_001661395.1
+  - Hypoxylon_fragiforme              # GCF_022984875.1
+  - Hypoxylon_trugodes                # GCF_022578975.1
+  - Ilyonectria_robusta               # GCF_021365365.1
+  - Kickxella_alabastrina             # GCF_025024165.1
+  - Kluyveromyces_lactis              # GCF_000002515.2
+  - Kluyveromyces_marxianus           # GCF_001417885.1
+  - Kockovaella_imperatae             # GCF_002102565.1
+  - Komagataella_phaffii              # GCF_000027005.1
+  - Kuraishia_capsulata               # GCF_000576695.1
+  - Lachancea_thermotolerans          # GCF_000142805.1
+  - Laetiporus_sulphureus             # GCF_001632365.1
+  - Lasiodiplodia_theobromae          # GCF_012971845.1
+  - Lasiosphaeria_miniovina           # GCF_030549165.1
+  - Lentinula_edodes                  # GCF_021015755.1
+  - Linderina_pennispora              # GCF_002104995.1
+  - Lindgomyces_ingoldianus           # GCF_010093535.1
+  - Lipomyces_tetrasporus             # GCF_029532465.1
+  - Lobosporangium_transversale       # GCF_002105155.1
+  - Macroventuria_anomochaeta         # GCF_010093625.1
+  - Metarhizium_brunneum              # GCF_013426205.1
+  - Metarhizium_robertsii             # GCF_000187425.2
+  - Mollisia_scopiformis              # GCF_001500285.1
+  - Morchella_importuna               # GCF_003444635.1
+  - Mucor_mucedo                      # GCF_025094135.1
+  - Mucor_velutinosus                 # GCF_035048745.1
+  - Mycotypha_africana                # GCF_025528875.1
+  - Mytilinidion_resinicola           # GCF_010093595.1
+  - Myxozyma_melibiosi                # GCF_037950935.1
+  - Nakaseomyces_glabratus            # GCF_010111755.1
+  - Neohortaea_acidophila             # GCF_010093505.1
+  - Neurospora_crassa                 # GCF_000182925.2
+  - Neurospora_tetraspora             # GCF_033439725.1
+  - Paecilomyces_variotii             # GCF_004022145.1
+  - Paraphaeosphaeria_sporulosa       # GCF_001642045.1
+  - Parathielavia_appendiculata       # GCF_033297405.1
+  - Penicillium_atrosanguineum        # GCF_028827265.1
+  - Penicillium_brevicompactum        # GCF_028827555.1
+  - Penicillium_chrysogenum           # GCF_028827035.1
+  - Penicillium_coprophilum           # GCF_028826855.1
+  - Penicillium_digitatum             # GCF_016767815.1
+  - Penicillium_expansum              # GCF_000769745.1
+  - Penicillium_oxalicum              # GCF_001723175.1
+  - Penicillium_solitum               # GCF_028829755.1
+  - Penicillium_subrubescens          # GCF_028828155.1
+  - Phycomyces_blakesleeanus          # GCF_001638985.1
+  - Phyllosticta_capitalensis         # GCF_038381095.1
+  - Phyllosticta_citribraziliensis    # GCF_038025025.1
+  - Plenodomus_lingam                 # GCF_022343315.1
+  - Pleurotus_ostreatus               # GCF_014466165.1
+  - Polychytrium_aggregatum           # GCF_025602895.1
+  - Postia_placenta                   # GCF_002117355.1
+  - Priceomyces_carsonii              # GCF_900007245.1
+  - Pseudocercospora_fijiensis        # GCF_000340215.1
+  - Pseudogymnoascus_verrucosus       # GCF_001662655.1
+  - Pseudomassariella_vexata          # GCF_002105095.1
+  - Pseudozyma_hubeiensis             # GCF_000403515.1
+  - Psilocybe_cubensis                # GCF_017499595.1
+  - Purpureocillium_lilacinum         # GCF_023168085.1
+  - Pyricularia_grisea                # GCF_004355905.1
+  - Pyricularia_oryzae                # GCF_000002495.2
+  - Radiomyces_spectabilis            # GCF_025331425.1
+  - Ramularia_collo-cygni             # GCF_900074925.1
+  - Rhizophagus_irregularis           # GCF_026210795.1
+  - Rhizopus_microsporus              # GCF_002708625.1
+  - Rhodotorula_toruloides            # GCF_000320785.1
+  - Saccharomyces_cerevisiae          # GCF_000146045.2
+  - Saccharomyces_kudriavzevii        # GCF_947243775.1
+  - Saccharomyces_mikatae             # GCF_947241705.1
+  - Saccharomyces_paradoxus           # GCF_002079055.1
+  - Saitoella_complicata              # GCF_001661265.1
+  - Scheffersomyces_amazonensis       # GCF_036850825.1
+  - Scheffersomyces_stipitis          # GCF_000209165.1
+  - Scheffersomyces_xylosifermentans  # GCF_036884685.1
+  - Schizosaccharomyces_cryophilus    # GCF_000004155.1
+  - Schizosaccharomyces_japonicus     # GCF_000149845.2
+  - Schizosaccharomyces_octosporus    # GCF_000150505.1
+  - Schizosaccharomyces_pombe         # GCF_000002945.2
+  - Sordaria_macrospora               # GCF_033870435.1
+  - Sphaerulina_musiva                # GCF_000320565.1
+  - Spizellomyces_punctatus           # GCF_000182565.1
+  - Suillus_bovinus                   # GCF_016758785.1
+  - Suillus_clintonianus              # GCF_016758775.1
+  - Suillus_fuscotomentosus           # GCF_016647785.1
+  - Suillus_paluster                  # GCF_016628075.1
+  - Suillus_plorans                   # GCF_016647745.1
+  - Suillus_subalutaceus              # GCF_016647625.1
+  - Talaromyces_proteolyticus         # GCF_021365285.1
+  - Torulaspora_delbrueckii           # GCF_000243375.1
+  - Trametes_versicolor               # GCF_000271585.1
+  - Trematosphaeria_pertusa           # GCF_010094035.1
+  - Trichoderma_aggressivum           # GCF_033847375.1
+  - Trichoderma_breve                 # GCF_028502605.1
+  - Trichoderma_harzianum             # GCF_003025095.1
+  - Trichoderma_reesei                # GCF_000167675.1
+  - Trichoderma_virens                # GCF_000170995.1
+  - Truncatella_angustata             # GCF_020726525.1
+  - Umbelopsis_ramanniana             # GCF_025399195.1
+  - Ustilaginoidea_virens             # GCF_000687475.1
+  - Ustilago_hordei                   # GCF_900519145.1
+  - Ustilago_maydis                   # GCF_000328475.2
+  - Westerdykella_ornata              # GCF_010094085.1
+  - Wickerhamomyces_anomalus          # GCF_001661255.1
+  - Xylaria_bambusicola               # GCF_022495145.1
+  - Yarrowia_lipolytica               # GCF_014490615.1
+  - Zychaea_mexicana                  # GCF_025766255.1
   # diatoms (18)
-  - Asterionella_formosa
-  - Chaetoceros_muelleri
-  - Chaetoceros_tenuissimus
-  - Conticribra_guillardii
-  - Conticribra_weissflogii
-  - Cyclostephanos_invisitatus
-  - Cyclotella_atomus
-  - Cyclotella_choctawhatcheeana
-  - Cylindrotheca_closterium
-  - Discostella_pseudostelligera
-  - Discostella_stelligera
-  - Mayamaea_pseudoterrestris
-  - Pseudo-nitzschia_multistriata
-  - Seminavis_robusta
-  - Skeletonema_menzelii
-  - Skeletonema_potamos
-  - Stephanodiscus_triporus
-  - Thalassiosira_mediterranea
+  - Asterionella_formosa              # GCA_002256025.1
+  - Chaetoceros_muelleri              # GCA_019693545.1
+  - Chaetoceros_tenuissimus           # GCA_021927905.1
+  - Conticribra_guillardii            # GCA_036939335.1
+  - Conticribra_weissflogii           # GCA_036940025.1
+  - Cyclostephanos_invisitatus        # GCA_036939675.1
+  - Cyclotella_atomus                 # GCA_013187285.1
+  - Cyclotella_choctawhatcheeana      # GCA_036939855.1
+  - Cylindrotheca_closterium          # GCA_933822405.4
+  - Discostella_pseudostelligera      # GCA_036940085.1
+  - Discostella_stelligera            # GCA_036939735.1
+  - Mayamaea_pseudoterrestris         # GCA_027923505.1
+  - Pseudo-nitzschia_multistriata     # GCA_900660405.1
+  - Seminavis_robusta                 # GCA_903772945.1
+  - Skeletonema_menzelii              # GCA_036940005.1
+  - Skeletonema_potamos               # GCA_036940105.1
+  - Stephanodiscus_triporus           # GCA_036939755.1
+  - Thalassiosira_mediterranea        # GCA_022925895.1
   # chlorophyta (6)
-  - Astrephomene_gubernaculifera
-  - Chlamydomonas_reinhardtii
-  - Chloropicon_primus
-  - Ostreococcus_lucimarinus
-  - Tetradesmus_obliquus
-  - Volvox_carteri
+  - Astrephomene_gubernaculifera      # GCA_021605115.1
+  - Chlamydomonas_reinhardtii         # GCF_000002595.2
+  - Chloropicon_primus                # GCA_023205875.1
+  - Ostreococcus_lucimarinus          # GCF_000092065.1
+  - Tetradesmus_obliquus              # GCA_030272155.1
+  - Volvox_carteri                    # GCF_000143455.1

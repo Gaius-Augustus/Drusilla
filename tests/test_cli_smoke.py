@@ -179,10 +179,14 @@ def test_annotate_option_consistency():
 
 def test_models_list_shows_all_bundled_models(capsys, tmp_path, monkeypatch):
     monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path))
+    monkeypatch.delenv("DRUSILLA_MODEL_CFG_DIR", raising=False)
     assert main(["models", "list"]) == 0
     out = capsys.readouterr().out
-    assert "insects" in out
     assert "drusilla_model" in out and "bundled" in out
+    # one row per registered model: drusilla_model is the only one
+    names = [ln.split()[0] for ln in out.splitlines()
+             if ln.strip() and not ln.startswith((" ", "cache dir"))]
+    assert names == ["drusilla_model"]
 
 
 def test_default_model_is_registered_and_bundled():

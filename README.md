@@ -8,13 +8,6 @@ writes a genomic GTF of CDS lines.
 
 [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) runs Drusilla in a Nextflow pipeline that combines it with ab initio predictions from [Tiberius](https://github.com/Gaius-Augustus/Tiberius).
 
-> **Model availability.** Drusilla ships one model, `drusilla_model`, for
-> vertebrates, insects, land plants, fungi, diatoms and green algae. Its
-> weights are part of the repository and of the Python package, so nothing
-> is downloaded and `--model` can be omitted. The insect model of
-> Drusilla 0.2 (`--model insects`) stays registered as a legacy download.
-> See the [Models](#models) section.
-
 ---
 
 ## Install
@@ -72,10 +65,7 @@ singularity run --nv \
 ```
 
 `--nv` is required for GPU access. The bundled `drusilla_model` is part
-of the image, so nothing is downloaded. Only the legacy insect model
-(`--model insects`) is downloaded on first use, into
-`~/.cache/drusilla` (or `DRUSILLA_CACHE_DIR`); Singularity binds `$HOME`
-by default, so that download persists across runs.
+of the image, so nothing is downloaded.
 
 On clusters that block direct DockerHub pulls from compute nodes, build
 the `.sif` once on a login node (or a workstation) and copy it to the
@@ -187,12 +177,11 @@ both-strand scanning with `nonoverlap`, all ORFs per transcript and
 500 bp flanks with ORF completion, because that is how its training
 labels were built and how it was benchmarked. Anything given on the
 command line wins (`--no-unstranded-both-strands`, `--orfs-per-tx 1`,
-`--flank-bp 0` ...). The legacy `insects` manifest sets nothing, so its
-behaviour is unchanged.
+`--flank-bp 0` ...).
 
 Example for a compact genome assembled from pooled, partly unstranded
 RNA-seq; with `drusilla_model` the four option lines are its manifest
-presets and can be dropped, with the legacy `insects` model they are needed:
+presets and can be dropped, with `--weights` they are needed:
 
 ```bash
 drusilla annotate \
@@ -206,63 +195,13 @@ drusilla annotate \
 
 ## Models
 
-Drusilla ships one model, `drusilla_model`, trained on 425 species of six
+Drusilla's model was trained on 425 species of six
 clades. Its weights (`models/drusilla_model/model.weights.h5`, 28 MB) and
 architecture config (`configs/drusilla_model.yaml`) are part of the
 repository and of the wheel; the manifest
 [`model_cfg/drusilla_model.yaml`](model_cfg/drusilla_model.yaml) points at
 them with `weights_path` / `arch_path`, and the SHA256 of the weights file
-is checked on use. The insect model of Drusilla 0.2 stays registered as a
-legacy download.
-
-| Name (`--model`)   | Clade / target      | Status         | Architecture       | Notes |
-|--------------------|---------------------|----------------|--------------------|-------|
-| `drusilla_model`   | Vertebrata, Insecta, Embryophyta, Fungi, diatoms, Chlorophyta | **Released, default, bundled** | CNN + BiLSTM (6-state HMM head) | Trained on 425 species with label policy v2 ([docs/data_prep.md](docs/data_prep.md)), validated on 6 held-out species of 3 clades; epoch 73 of training run `cnn_lstm_joint_run001`. In the test benchmarks it matched or beat every per-clade model (mean gene-level F1 +2.9, land plants +8.8). |
-| `insects`          | Insecta             | Legacy, preliminary (download) | CNN + BiLSTM (6-state HMM head) | Trained on the 99 insect species listed in the manifest. |
-
-What distinguishes `drusilla_model` from the legacy `insects` model, apart
-from the clades it covers: its manifest presets both-strand scanning of unstranded
-transcripts with the `nonoverlap` rule, no cap on ORFs per transcript and
-500 bp genomic flanks with ORF completion (see
-[Unstranded, truncated and fused transcripts](#unstranded-truncated-and-fused-transcripts)),
-so `drusilla annotate` needs none of those flags. Its training data follow
-label policy v2, so its predictions can contain several genes per fused
-transcript and minus-strand genes on unstranded transcripts, which
-`insects` never emits.
-
-Applying the legacy `insects` model to species from another clade is
-technically possible but the predictions are not benchmarked and will
-underperform; use `drusilla_model`, or train your own with
-`drusilla train` (see [docs/training.md](docs/training.md)).
-
-Model releases are described by per-model manifests under
-[`model_cfg/`](model_cfg/) (one YAML per model — see
-[`model_cfg/README.md`](model_cfg/README.md) for the schema and how to
-publish a new release). Each manifest points at a `.tar.gz` archive
-that bundles both the weights and their architecture config, so
-released models are always internally consistent.
-
-List available models and their local cache status:
-
-```bash
-drusilla models list
-```
-
-Download the legacy insect model without running annotate
-(`drusilla_model` is bundled and needs no download):
-
-```bash
-drusilla models download insects
-```
-
-Downloaded archives are verified against the manifest's SHA256, then
-extracted to `$XDG_CACHE_HOME/drusilla/models/<name>/` (default:
-`~/.cache/drusilla/models/`). A `.drusilla_version` marker in that
-directory records the manifest version, so bumping `version` in a
-manifest triggers a re-download. Set `DRUSILLA_CACHE_DIR` to
-override the cache location, or `DRUSILLA_MODEL_CFG_DIR` to add a
-directory of extra manifests (useful for staging a new release without
-editing the package).
+is checked on use.
 
 ---
 

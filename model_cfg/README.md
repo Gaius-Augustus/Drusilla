@@ -10,9 +10,9 @@ A manifest names its weights in one of two ways.
 
 ## Bundled model (`weights_path`): `drusilla_model`
 
-[drusilla_model.yaml](drusilla_model.yaml) is the released Drusilla model.
-Its weights and architecture config are files of the repository and of the
-wheel:
+[drusilla_model.yaml](drusilla_model.yaml) is the released Drusilla model and
+holds the inline field reference. Its weights and architecture config are
+files of the repository and of the wheel:
 
 - `models/drusilla_model/model.weights.h5`: Keras weights (28 MB), epoch 73
   of training run `cnn_lstm_joint_run001`
@@ -52,12 +52,11 @@ To ship new weights for `drusilla_model`:
    plain git object (no LFS), so every replacement adds its size to the
    history; replace them for real releases only.
 
-## Downloaded model (`weights_url`): legacy `insects`
+## Downloaded model (`weights_url`)
 
-[insects.yaml](insects.yaml) is the insect model of Drusilla 0.2, kept for
-reproducibility (`--model insects`); it also holds the inline field
-reference.
-The weights live in a `.tar.gz` archive at `weights_url`, which must extract
+No released model is downloaded. The registry still supports it for
+manifests added through `DRUSILLA_MODEL_CFG_DIR`. The weights live in a
+`.tar.gz` archive at `weights_url`, which must extract
 to a directory named exactly like the model, `<name>/`, containing:
 
 - `model.weights.h5`: Keras weights file (a plain `weights.h5` is accepted
@@ -89,8 +88,8 @@ here with `weights_url`, `weights_sha256` and `training_run`.
   (`nonoverlap|longest|both`), `orfs_per_tx` (int >= 0), `flank_bp`,
   `flank_3p_bp` (int >= 0), `flank_keep` (bool). Unknown keys or wrong
   types abort `annotate` with a message. `drusilla_model` presets the
-  inference rules it was trained and benchmarked with; the `insects`
-  manifest sets nothing and so keeps the built-in defaults.
+  inference rules it was trained and benchmarked with; a manifest without
+  the block keeps the built-in defaults.
 - `label_policy`: informational, the label policy of the training data
-  (`v1` for `insects`, `v2` for `drusilla_model`; see
+  (`v2` for `drusilla_model`; see
   `docs/data_prep.md`).

@@ -15,11 +15,11 @@ from drusilla import registry
 
 def test_bundled_manifest_loads():
     manifests = registry.list_manifests()
-    assert "insects" in manifests
-    mf = manifests["insects"]
-    assert mf.name == "insects"
+    assert "drusilla_model" in manifests
+    mf = manifests["drusilla_model"]
+    assert mf.name == "drusilla_model"
     assert mf.version
-    assert mf.weights_url
+    assert mf.bundled
 
 
 def test_load_manifest_unknown_raises():
@@ -75,8 +75,13 @@ def test_cache_dir_respects_env(tmp_path, monkeypatch):
 # ---------- status ----------
 
 def test_status_uncached(tmp_path, monkeypatch):
-    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path))
-    st = registry.local_status("insects")
+    """A downloaded model that was never fetched is reported as not cached."""
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    _write_manifest(cfg_dir, "fakemodel", "1.0", "https://example.com/fakemodel.tar.gz")
+    monkeypatch.setenv("DRUSILLA_MODEL_CFG_DIR", str(cfg_dir))
+    monkeypatch.setenv("DRUSILLA_CACHE_DIR", str(tmp_path / "cache"))
+    st = registry.local_status("fakemodel")
     assert st["cached"] is False
 
 
@@ -361,9 +366,9 @@ def test_every_repo_manifest_is_discoverable():
     """All model_cfg/*.yaml in the repo load through the registry."""
     repo_cfg = Path(__file__).resolve().parents[1] / "model_cfg"
     expected = {p.stem for p in repo_cfg.glob("*.yaml")}
-    assert {"drusilla_model", "insects"} <= expected
-    # The vertebrate model of Drusilla 0.2 was removed: drusilla_model replaces it.
-    assert "vertebrates" not in expected
+    # drusilla_model is the only released model; the per-clade models of
+    # Drusilla 0.2 (vertebrates, insects) were removed.
+    assert expected == {"drusilla_model"}
     assert expected <= set(registry.list_manifests())
 
 

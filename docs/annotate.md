@@ -26,7 +26,7 @@ Exactly one path chooses the model:
 | Flag | Meaning |
 |---|---|
 | _(default)_             | Uses the default registered model (`DEFAULT_MODEL` in `drusilla/cli/annotate.py`): `drusilla_model`, whose weights ship with the package. |
-| `--model NAME`          | Registered model (see `drusilla models list`). `drusilla_model` is bundled: weights and architecture config are read from the package and the SHA256 of the weights is checked. A legacy download model is fetched as a `.tar.gz` archive on first use, verified and extracted to the cache. No `--config` needed either way. |
+| `--model NAME`          | Registered model (see `drusilla models list`). `drusilla_model` is bundled: weights and architecture config are read from the package and the SHA256 of the weights is checked. No `--config` needed. |
 | `--weights FILE`        | Local `.weights.h5`. Requires `--config FILE` alongside it (the architecture is not carried inside `.weights.h5`). |
 
 If you pass `--config` together with `--model`, the local config
@@ -42,12 +42,11 @@ the command line; explicit flags always win (the boolean options have
 `[model] inference defaults taken from the model manifest: ...`. The
 `drusilla_model` manifest presets both-strand scanning with `nonoverlap`,
 `orfs_per_tx 0` and 500 bp flanks with completion, matching its training
-labels (label policy v2); the legacy `insects` sets nothing. With
+labels (label policy v2). With
 `--weights` no manifest is involved and the built-in defaults apply.
 
-> **Available models: `drusilla_model` (default, bundled) for vertebrates,
-> insects, land plants, fungi, diatoms and green algae; the legacy
-> `insects` download of Drusilla 0.2.** See the
+> **Available model: `drusilla_model` (default, bundled) for vertebrates,
+> insects, land plants, fungi, diatoms and green algae.** See the
 > [Models table in the README](../README.md#models).
 
 ## Output

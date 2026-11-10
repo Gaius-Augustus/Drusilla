@@ -9,8 +9,8 @@ Two input modes:
 
 Model weights are resolved via the registry: the bundled ``drusilla_model``
 is used by default, ``--model <name>`` selects another registered model
-(the legacy insect model is downloaded on first use), and
-``--weights <path>`` loads a locally-trained checkpoint.
+(see ``drusilla models list``), and ``--weights <path>`` loads a
+locally-trained checkpoint.
 
 Default output (in --out-dir):
     orfs.gtf        PRIMARY. Genomic-coordinate GTF of predicted CDS lines
@@ -83,8 +83,8 @@ def add_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--genome", type=Path, required=True,
                     help="Genome FASTA matching the GTF/BAM contig names.")
 
-    # Model selection: a registered name (bundled, or downloaded for the
-    # legacy models) or a local weights file (advanced / custom-trained).
+    # Model selection: a registered name (see `drusilla models list`) or a
+    # local weights file (advanced / custom-trained).
     mdl = ap.add_mutually_exclusive_group()
     mdl.add_argument("--model", type=str, default=None,
                      help="Registered model name (see `drusilla models list`). "
@@ -475,7 +475,6 @@ def _make_predict_func(
 
 # Model used when neither --model nor --weights is given: the bundled
 # multi-clade model (model_cfg/drusilla_model.yaml, weights in the package).
-# The legacy insect model stays available by name (downloaded on use).
 DEFAULT_MODEL = "drusilla_model"
 
 # Inference options a model manifest may preset in its ``annotate_defaults``
@@ -548,8 +547,8 @@ def _resolve_model_paths(args: argparse.Namespace) -> tuple[Path, Path]:
         Both are required together; the arch config travels with released
         models, so a local checkpoint needs its own.
       * ``--model NAME`` (or the default ``drusilla_model``): resolve via the
-        registry. A bundled model is read from the package; a legacy model
-        is downloaded and extracted on first use.
+        registry. A bundled model is read from the package; a manifest
+        with ``weights_url`` is downloaded and extracted on first use.
     """
     from .. import registry
 
