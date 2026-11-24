@@ -48,6 +48,31 @@ DEFAULT_STOP_CODONS: tuple[tuple[str, float], ...] = (
 )
 
 
+# Stop codons per NCBI translation table. A codon that is a stop in table 1
+# and missing here is a sense codon in that table (table 6: TAA and TAG code
+# for Gln, TGA is the only stop).
+STOP_CODONS_BY_TABLE: dict[int, tuple[str, ...]] = {
+    1: ("TAG", "TAA", "TGA"),
+    6: ("TGA",),
+    10: ("TAA", "TAG"),
+    12: ("TAA", "TAG", "TGA"),
+    29: ("TGA",),
+    30: ("TGA",),
+}
+
+
+def stop_codons_for_table(table: int) -> tuple[tuple[str, float], ...]:
+    """Stop codon distribution (uniform) of an NCBI translation table."""
+    try:
+        codons = STOP_CODONS_BY_TABLE[int(table)]
+    except KeyError:
+        raise ValueError(
+            f"translation table {table} is not supported "
+            f"(supported: {sorted(STOP_CODONS_BY_TABLE)})"
+        ) from None
+    return tuple((c, 1.0 / len(codons)) for c in codons)
+
+
 def state_transitions(
     initial_ir_len: float,
     initial_exon_len: float,

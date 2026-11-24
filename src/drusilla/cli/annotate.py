@@ -109,6 +109,10 @@ def add_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--no-codon-emitter", action="store_true",
                     help="Disable hard ATG/STOP/in-frame-stop codon "
                          "constraints in the HMM (debugging variant).")
+    ap.add_argument("--translation-table", type=int, default=1,
+                    help="NCBI translation table that sets the stop codons "
+                         "of the HMM (default 1: TAA, TAG, TGA; 6: TGA only). "
+                         "The network is not retrained for it.")
     ap.add_argument("--restrict-start-to-ir-start", action="store_true",
                     help="Restrict the HMM's initial-state distribution "
                          "to {IR, START}.")
@@ -443,6 +447,14 @@ def _make_predict_func(
 
     tib_to_b2m = _get_tib_to_b2m()
 
+    # Graph mode: without cuDNN (CPU) an eager call steps through the LSTM
+    # op by op, about 30 times slower than the traced function.
+    import tensorflow as tf
+
+    @tf.function(reduce_retracing=True)
+    def model_fn(batch):
+        return model(batch, training=False)
+
     def predict_func(fasta):
         N, T = fasta.N, fasta.T
         if N == 0:
@@ -453,7 +465,7 @@ def _make_predict_func(
         labels_out = np.empty((N, T), dtype=np.int32)
         for i in range(0, N, batch_size):
             sl = slice(i, i + batch_size)
-            logits_b = model(x[sl], training=False).numpy()
+            logits_b = model_fn(tf.constant(x[sl])).numpy()
             labels_b = viterbi_decode_batch(
                 hmm, logits_b, nuc_one_hot[sl], pad_mask=pad_mask[sl],
             )
@@ -796,10 +808,12 @@ def run(args: argparse.Namespace) -> int:
         use_codon_emitter=not args.no_codon_emitter,
         restrict_start_to_ir_start=args.restrict_start_to_ir_start,
         ir_start_prior_ir=args.ir_prior,
+        translation_table=args.translation_table,
     )
     print(
         f"Built OrfAnnotationHMM (parallel={args.parallel}, "
         f"codon_emitter={not args.no_codon_emitter}, "
+        f"translation_table={args.translation_table}, "
         f"restrict_start_to_ir_start={args.restrict_start_to_ir_start}, "
         f"ir_prior={args.ir_prior})",
         flush=True,
@@ -809,7 +823,13 @@ def run(args: argparse.Namespace) -> int:
     tx_seqs: dict[str, str] = {}
     classify_lorf = None
     if args.lorf_class:
-        from ..data.gtf_writer import classify_lorf
+        from functools import partial
+        from ..data.gtf_writer import classify_lorf as _classify_lorf
+        from ..hmm.annotation_hmm import stop_codons_for_table
+        classify_lorf = partial(
+            _classify_lorf,
+            stop_codons=frozenset(c for c, _ in stop_codons_for_table(args.translation_table)),
+        )
         tx_seqs = _load_tx_seqs(orig_transcripts_fa)
         print(f"Loaded {len(tx_seqs)} transcript sequences for LORF classification",
               flush=True)

@@ -62,3 +62,13 @@ def test_classify_up_lorf():
     seq = "ATG" + "CCC" * 3 + "ATG"
     cls = classify_lorf(seq, orf_tx_start=12)
     assert cls == "upLORF"
+
+
+def test_classify_lorf_stop_codons_of_translation_table_6():
+    # TAA is a sense codon in table 6, so it is no upstream stop there.
+    seq = "TAA" + "CCC" * 3 + "ATG"
+    cls = classify_lorf(seq, orf_tx_start=12, stop_codons=frozenset({"TGA"}))
+    assert cls == "LORF_NOUPSTOP"
+    seq = "TGA" + "CCC" * 3 + "ATG"
+    cls = classify_lorf(seq, orf_tx_start=12, stop_codons=frozenset({"TGA"}))
+    assert cls == "LORF_UPSTOP"

@@ -31,7 +31,8 @@ LORF_NOUPSTOP = "LORF_NOUPSTOP"
 _STOP_CODONS = frozenset({"TAA", "TAG", "TGA"})
 
 
-def classify_lorf(tx_seq: str, orf_tx_start: int) -> str:
+def classify_lorf(tx_seq: str, orf_tx_start: int,
+                  stop_codons: frozenset[str] = _STOP_CODONS) -> str:
     """Classify the 5' context of an ORF by scanning upstream in-frame for stop codons.
 
     LORF_UPSTOP   - in-frame stop upstream; no ATG between it and our ATG.
@@ -45,7 +46,7 @@ def classify_lorf(tx_seq: str, orf_tx_start: int) -> str:
     p = orf_tx_start
     upstream_stop: int | None = None
     for pos in range(p - 3, -1, -3):
-        if tx_seq[pos : pos + 3].upper() in _STOP_CODONS:
+        if tx_seq[pos : pos + 3].upper() in stop_codons:
             upstream_stop = pos
             break
     if upstream_stop is not None:

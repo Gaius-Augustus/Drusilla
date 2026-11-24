@@ -25,7 +25,7 @@ import numpy as np
 import tensorflow as tf
 from hidten import HMMMode
 
-from .annotation_hmm import OrfAnnotationHMM
+from .annotation_hmm import OrfAnnotationHMM, stop_codons_for_table
 
 
 DEFAULT_PARALLEL = 100
@@ -39,8 +39,13 @@ def build_decoder_hmm(
     use_codon_emitter: bool = True,
     restrict_start_to_ir_start: bool = False,
     ir_start_prior_ir: float = 0.5,
+    translation_table: int = 1,
 ) -> OrfAnnotationHMM:
-    """Build a Viterbi-mode :class:`OrfAnnotationHMM` ready for decoding."""
+    """Build a Viterbi-mode :class:`OrfAnnotationHMM` ready for decoding.
+
+    ``translation_table`` sets the stop codons of the codon emitters; the
+    network weights do not depend on it.
+    """
     return OrfAnnotationHMM(
         mode=HMMMode.VITERBI,
         parallel=parallel,
@@ -50,6 +55,7 @@ def build_decoder_hmm(
         use_codon_emitter=use_codon_emitter,
         restrict_start_to_ir_start=restrict_start_to_ir_start,
         ir_start_prior_ir=ir_start_prior_ir,
+        stop_codons=list(stop_codons_for_table(translation_table)),
     )
 
 
