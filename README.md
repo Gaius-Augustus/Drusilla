@@ -224,8 +224,8 @@ changes no length. Run time and memory are three times those of a table-1
 run. `--partial-out` and `--partial5-out` need table 1.
 
 On *Tetrahymena thermophila* (table 6, 26,996 RefSeq genes; StringTie
-assembly of 35,375 transcripts) the recoded transcripts give 12,845 CDS that
-match the reference exactly (precision 0.51, sensitivity 0.48); the longest
+assembly of 35,375 transcripts) the option gives 12,912 CDS that
+match the reference exactly (precision 0.53, sensitivity 0.48); the longest
 ORF from ATG to TGA gives 11,721 (0.44, 0.43), Drusilla without the option
 31 on the reference transcripts.
 
