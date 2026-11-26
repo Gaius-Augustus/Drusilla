@@ -109,6 +109,14 @@ def add_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--no-codon-emitter", action="store_true",
                     help="Disable hard ATG/STOP/in-frame-stop codon "
                          "constraints in the HMM (debugging variant).")
+    ap.add_argument("--translation-table", type=int, default=1,
+                    help="NCBI translation table of the nuclear genome "
+                         "(default 1; also 6, 10, 15, 29, 30). "
+                         "Other than 1: frame recoding, each transcript is "
+                         "scanned once per reading frame with the reassigned "
+                         "stop codons of that frame replaced by a table-1 "
+                         "codon of the same amino acid (three times the run "
+                         "time and memory). The network is not retrained.")
     ap.add_argument("--restrict-start-to-ir-start", action="store_true",
                     help="Restrict the HMM's initial-state distribution "
                          "to {IR, START}.")
@@ -443,6 +451,14 @@ def _make_predict_func(
 
     tib_to_b2m = _get_tib_to_b2m()
 
+    # Graph mode: without cuDNN (CPU) an eager call steps through the LSTM
+    # op by op, about 30 times slower than the traced function.
+    import tensorflow as tf
+
+    @tf.function(reduce_retracing=True)
+    def model_fn(batch):
+        return model(batch, training=False)
+
     def predict_func(fasta):
         N, T = fasta.N, fasta.T
         if N == 0:
@@ -453,7 +469,7 @@ def _make_predict_func(
         labels_out = np.empty((N, T), dtype=np.int32)
         for i in range(0, N, batch_size):
             sl = slice(i, i + batch_size)
-            logits_b = model(x[sl], training=False).numpy()
+            logits_b = model_fn(tf.constant(x[sl])).numpy()
             labels_b = viterbi_decode_batch(
                 hmm, logits_b, nuc_one_hot[sl], pad_mask=pad_mask[sl],
             )
@@ -599,6 +615,13 @@ def _check_option_consistency(args: argparse.Namespace) -> None:
         raise SystemExit("--fix-strand needs pysam: pip install pysam  (or drusilla[bam])")
     if args.orfs_per_tx < 0:
         raise SystemExit("--orfs-per-tx must be >= 0")
+    from ..data.recode import recoding_for_table
+    try:
+        recoding = recoding_for_table(args.translation_table)
+    except ValueError as e:
+        raise SystemExit(f"--translation-table: {e}") from None
+    if recoding and (args.partial_out is not None or args.partial5_out is not None):
+        raise SystemExit("--partial-out and --partial5-out need --translation-table 1")
     if not 0.0 <= args.flank_min_tx_frac <= 1.0:
         raise SystemExit("--flank-min-tx-frac must be between 0 and 1")
 
@@ -609,6 +632,7 @@ def run(args: argparse.Namespace) -> int:
     import numpy as np
     import yaml
 
+    from ..data import recode
     from ..data import tx_augment as txa
     from ..data.label_transcripts import parse_stringtie_gtf
     from ..data.tx_to_genome import genomic_segments, project_tx_intervals_to_genomic
@@ -780,6 +804,23 @@ def run(args: argparse.Namespace) -> int:
         transcripts_fa = padded_fa
         tmp_files.append(padded_fa)
 
+    # 2d. genetic code other than table 1: three frame copies of every
+    # record (flanks included), each with the reassigned stop codons of its
+    # frame recoded (see data/recode.py). The HMM keeps the table-1 stop
+    # codons: in the recoded frame only the stops of the table are left.
+    recoding = recode.recoding_for_table(args.translation_table)
+    if recoding:
+        recoded_fa = args.out_dir / "transcripts.recoded.fa"
+        n_rec = txa.rewrite_fasta(transcripts_fa, recoded_fa, recode.frame_copies(recoding))
+        print(
+            f"Translation table {args.translation_table}: frame recoding "
+            + ", ".join(f"{a}->{b}" for a, b in sorted(recoding.items()))
+            + f", {n_rec} records -> {recoded_fa}",
+            flush=True,
+        )
+        transcripts_fa = recoded_fa
+        tmp_files.append(recoded_fa)
+
     # 3. load model + HMM
     import tensorflow as tf  # noqa: F401
     _enable_gpu_memory_growth()
@@ -809,7 +850,12 @@ def run(args: argparse.Namespace) -> int:
     tx_seqs: dict[str, str] = {}
     classify_lorf = None
     if args.lorf_class:
-        from ..data.gtf_writer import classify_lorf
+        from functools import partial
+        from ..data.gtf_writer import classify_lorf as _classify_lorf
+        classify_lorf = partial(
+            _classify_lorf,
+            stop_codons=recode.stop_codons_for_table(args.translation_table),
+        )
         tx_seqs = _load_tx_seqs(orig_transcripts_fa)
         print(f"Loaded {len(tx_seqs)} transcript sequences for LORF classification",
               flush=True)
@@ -862,10 +908,17 @@ def run(args: argparse.Namespace) -> int:
                 txs = seq_ann.transcripts()
             for tx in txs:
                 tid = tx.sequence
+                frame = None
+                if recoding:
+                    tid, frame = recode.split_frame_id(tid)
                 if tid not in transcripts:
                     continue
                 cds = sorted((c.start, c.end) for c in tx.cds)
                 if not cds:
+                    continue
+                # frame copy: only ORFs in the frame the copy was recoded for
+                if frame is not None and cds[0][0] % 3 != frame:
+                    counters["other_frame"] += 1
                     continue
                 tx_len = transcripts[tid].length
                 res = txa.resolve_orf(
@@ -935,6 +988,24 @@ def run(args: argparse.Namespace) -> int:
         group_size_limit=1_000_000_000,
     )
     tmp_files.append(b2m_gtf)
+
+    # 7. frame copies: the ORFs of the three copies of a record are pooled
+    # and kept longest first, dropping any ORF that shares genomic bases with
+    # a kept one (a stretch of mRNA is translated in one frame).
+    if recoding:
+        n_pool = n_kept = 0
+        for tid, orfs in per_tx_orfs.items():
+            keep = txa.select_nonoverlapping(
+                [(o["coding_length"], genomic_segments(o["intervals"], o["model"]))
+                 for o in orfs],
+            )
+            n_pool += len(orfs)
+            n_kept += len(keep)
+            per_tx_orfs[tid] = [orfs[i] for i in keep]
+        print(f"frame recoding: ORFs in another frame than their copy "
+              f"{counters['other_frame']} (dropped); in frame {n_pool}, "
+              f"kept {n_kept}, dropped as overlaps of a longer ORF "
+              f"{n_pool - n_kept}", flush=True)
 
     # 7a. unstranded transcripts, --unstranded-pick nonoverlap: pool the ORFs
     # of both orientations and keep them longest first, dropping any ORF that

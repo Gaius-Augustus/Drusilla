@@ -193,6 +193,42 @@ drusilla annotate \
   --out-dir       results/
 ```
 
+## Genomes with another genetic code
+
+The model was trained on genomes of the standard code (NCBI translation
+table 1) and labels a CDS with an in-frame TAA, TAG or TGA as non-coding. In
+a genome that reads one or two of these codons as an amino acid, nearly every
+CDS has them. `--translation-table N` handles such genomes without a new
+model:
+
+```bash
+drusilla annotate --assembly-gtf stringtie.gtf --genome genome.fa \
+  --translation-table 6 --out-dir out/
+```
+
+| Table | Genomes | Recoded |
+|-------|---------|---------|
+| 6 | ciliates such as *Tetrahymena* and *Paramecium*, Dasycladaceae, *Hexamita* | TAA to CAA, TAG to CAG (Gln) |
+| 10 | *Euplotes* | TGA to TGT (Cys) |
+| 15 | *Blepharisma* | TAG to CAG (Gln) |
+| 29 | *Mesodinium* | TAA to TAT, TAG to TAC (Tyr) |
+| 30 | peritrich ciliates | TAA to GAA, TAG to GAG (Glu) |
+
+Every transcript, with its genomic flanks, is scanned three times, once per
+reading frame, with the reassigned codons of that frame replaced by a
+standard codon of the same amino acid (frame recoding,
+`drusilla/data/recode.py`). An ORF is kept when it lies in the frame its copy
+was recoded for; among ORFs of the three copies that share genomic bases the
+longest is kept. Coordinates are those of the transcript, as the replacement
+changes no length. Run time and memory are three times those of a table-1
+run. `--partial-out` and `--partial5-out` need table 1.
+
+On *Tetrahymena thermophila* (table 6, 26,996 RefSeq genes; StringTie
+assembly of 35,375 transcripts) the option gives 12,912 CDS that
+match the reference exactly (precision 0.53, sensitivity 0.48); the longest
+ORF from ATG to TGA gives 11,721 (0.44, 0.43), Drusilla without the option
+31 on the reference transcripts.
+
 ## Models
 
 Drusilla's model was trained on 425 species of six
